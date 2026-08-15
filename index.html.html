@@ -1,0 +1,1801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>Cocktail Diary</title>
+  <style>
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+    body{background:#FAFAF7;font-family:system-ui,sans-serif}
+    ::-webkit-scrollbar{width:0;height:0}
+    #splash{position:fixed;inset:0;background:#FAFAF7;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:9999}
+    .spin{width:36px;height:36px;border:3px solid #F0EBE0;border-top-color:#D4893A;border-radius:50%;animation:s .8s linear infinite}
+    @keyframes s{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div id="splash">
+    <div style="font-size:42px">🍸</div>
+    <div class="spin"></div>
+    <div style="font-size:13px;color:#8C7E68;letter-spacing:.05em">Loading Cocktail Diary…</div>
+  </div>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useRef, useEffect } = React;
+
+
+/* ─── Light theme — Untappd-inspired warm yellows ─── */
+const C = {
+  bg:      "#FAFAF7",
+  surface: "#F4F1EA",
+  card:    "#FFFFFF",
+  border:  "#E8E2D5",
+  amber:   "#F5A623",
+  amberD:  "#D4881A",
+  gold:    "#E8943A",
+  cream:   "#FFF8EE",
+  dark:    "#1A1410",
+  body:    "#3D3428",
+  muted:   "#8C7E68",
+  faint:   "#F0EBE0",
+  green:   "#3D9E6A",
+  red:     "#C0402A",
+  blue:    "#3B7DD8",
+  shadow:  "rgba(0,0,0,0.07)",
+};
+
+/* ─── Data ─── */
+const FEED = [
+  { id:1, user:{name:"Alex Chen",  initials:"AC", hue:"#E8943A"}, bar:"Bar Raval",       barId:1, area:"Little Italy",  drink:"Smoked Negroni",    base:"Gin",    rating:5, note:"Best negroni in the city. The cherry-wood smoke changes everything.", time:"2h ago",   likes:14, comments:3 },
+  { id:2, user:{name:"Remi V.",    initials:"RV", hue:"#4A9E7A"}, bar:"Civil Liberties", barId:3, area:"Annex",          drink:"Bamboo Martini",    base:"Sherry", rating:4, note:"Low-ABV but genuinely complex.", time:"4h ago",   likes:8,  comments:1 },
+  { id:3, user:{name:"Kate Park",  initials:"KP", hue:"#8B5ED4"}, bar:"Bar Pompette",    barId:7, area:"Little Italy",  drink:"Cornichon Martini", base:"Gin",    rating:5, note:null, time:"Yesterday", likes:22, comments:5 },
+  { id:4, user:{name:"M. Okafor", initials:"MO", hue:"#3A8AAA"}, bar:"Pimm's Bar",      barId:5, area:"Distillery",    drink:"Yuzu Sour",         base:"Whisky", rating:2, note:"Too sweet — the yuzu got lost.", time:"Yesterday", likes:3,  comments:2 },
+  { id:5, user:{name:"Alex Chen",  initials:"AC", hue:"#E8943A"}, bar:"Labora",          barId:2, area:"King West",     drink:"Lavender Gimlet",   base:"Gin",    rating:4, note:null, time:"2 days ago", likes:11, comments:0 },
+];
+
+/* Toronto bars with approximate lat/lng */
+const ALL_BARS = [
+  { id:1, name:"Bar Raval",       area:"Little Italy", dist:"0.2 km", visited:true,  saved:true,  topDrink:"Smoked Negroni",    myRating:5, tags:["Speakeasy","Cocktails"],   naRank:null,worldRank:null, lat:43.6547, lng:-79.4193 },
+  { id:2, name:"Labora",          area:"King West",    dist:"0.6 km", visited:false, saved:true,  topDrink:null,                myRating:null, tags:["Wine Bar","Cocktails"],   naRank:null,worldRank:null, lat:43.6445, lng:-79.4049 },
+  { id:3, name:"Civil Liberties", area:"Annex",        dist:"0.9 km", visited:false, saved:false, topDrink:"Bespoke cocktail",  myRating:null, tags:["Speakeasy","No menu"],    naRank:21,  worldRank:null, rankLabel:"", lat:43.6621, lng:-79.4269 },
+  { id:4, name:"El Rey",          area:"Kensington",   dist:"1.4 km", visited:false, saved:false, topDrink:null,                myRating:null, tags:["Mezcal","Natural Wine"],  naRank:null,worldRank:null, lat:43.6551, lng:-79.4091 },
+  { id:5, name:"Pimm's Bar",      area:"Distillery",   dist:"2.1 km", visited:true,  saved:true,  topDrink:"Yuzu Sour",         myRating:4, tags:["Rooftop","Classic"],        naRank:null,worldRank:null, lat:43.6504, lng:-79.3591 },
+  { id:6, name:"Kōst Bar",        area:"Yorkville",    dist:"3.0 km", visited:false, saved:true,  topDrink:null,                myRating:null, tags:["Hotel Bar","Upscale"],     naRank:null,worldRank:null, lat:43.6709, lng:-79.3878 },
+  { id:7, name:"Bar Pompette",    area:"Little Italy", dist:"0.4 km", visited:false, saved:false, topDrink:"Cornichon Martini", myRating:null, tags:["French","Seasonal"],       naRank:7,   worldRank:55,  rankLabel:"#55 · 2025  ·  #7 · NA 2025", lat:43.6553, lng:-79.4196 },
+  { id:8, name:"Library Bar",     area:"Downtown",     dist:"2.8 km", visited:false, saved:false, topDrink:"Birdbath Martini",  myRating:null, tags:["Hotel Bar","Classic"],      naRank:19,  worldRank:null,rankLabel:"", lat:43.6476, lng:-79.3825 },
+  { id:9,  name:"Mother",              area:"Parkdale",      dist:"3.2 km", visited:false, saved:false, topDrink:"House Daiquiri",      myRating:null, tags:["Neighbourhood","Casual"],   naRank:22,  worldRank:null, rankLabel:"",        lat:43.6482,  lng:-79.4431, city:"Toronto" },
+  // New York — saved bars
+  { id:20, name:"Double Chicken Please", area:"Lower East Side", dist:"—",     visited:true,  saved:true,  topDrink:"Fried Chicken Colada", myRating:5,    tags:["Creative","Cocktails"],     naRank:null,worldRank:14,  rankLabel:"",          lat:40.7178,  lng:-73.9896, city:"New York" },
+  { id:21, name:"Superbueno",            area:"East Village",    dist:"—",     visited:false, saved:true,  topDrink:"Chilhuacle Sour",      myRating:null, tags:["Latin","Cocktails"],        naRank:2,   worldRank:null, rankLabel:"#2 · 2025  ·  NA Best Bar 2024",lat:40.7265,  lng:-73.9808, city:"New York" },
+  { id:22, name:"Overstory",             area:"Financial Dist",  dist:"—",     visited:false, saved:true,  topDrink:"Rooftop Martini",      myRating:null, tags:["Rooftop","Upscale"],        naRank:6,   worldRank:null, rankLabel:"",               lat:40.7074,  lng:-74.0085, city:"New York" },
+];
+
+const RANKED_BARS = [
+  { world:null, na:7,  name:"Bar Pompette",      city:"Toronto", addr:"607 College St, Toronto, ON",                        topDrink:"Cornichon Martini",        orders:218, badge:"🏅 Best Bar in Canada 2025", inToronto:true,  lat:43.6553, lng:-79.4196 },
+  { world:null, na:21, name:"Civil Liberties",   city:"Toronto", addr:"878 Bloor St W, Toronto, ON",                        topDrink:"Bespoke by bartender",     orders:156, badge:null, inToronto:true,  lat:43.6621, lng:-79.4269 },
+  { world:null, na:19, name:"Library Bar",       city:"Toronto", addr:"100 Front St W (Fairmont Royal York), Toronto",       topDrink:"Birdbath Martini",         orders:134, badge:null, inToronto:true,  lat:43.6476, lng:-79.3825 },
+  { world:null, na:22, name:"Mother",            city:"Toronto", addr:"1225 Dundas St W, Toronto, ON",                      topDrink:"House Daiquiri",           orders:98,  badge:null, inToronto:true,  lat:43.6482, lng:-79.4431 },
+  { world:1,  na:1,   name:"Handshake Speakeasy",city:"Mexico City", addr:"NH Hotel, Havre 77, Juárez, CDMX",              topDrink:"Mexi-Thai",                orders:312, badge:"🌍 World #1 · NA #1 2025",      lat:19.4240, lng:-99.1590 },
+  { world:2,  na:null,name:"Bar Leone",          city:"Hong Kong",   addr:"1 Peking Rd, Tsim Sha Tsui, HK",                topDrink:"Negroni Leone",            orders:289, badge:"🌍 World #2 · Best Bar Asia",   lat:22.2988, lng:114.1722 },
+  { world:3,  na:null,name:"Sips",               city:"Barcelona",   addr:"Muntaner 108, 08036 Barcelona",                  topDrink:"Primordial",               orders:241, badge:"🌍 World #3 · Best Bar Europe",  lat:41.3877, lng:2.1529 },
+  { world:4,  na:null,name:"Tayēr + Elementary", city:"London",      addr:"152 Old St, London EC1V 9BW",                    topDrink:"Seasonal Tasting Set",     orders:198, badge:"🌍 World #4",                    lat:51.5265, lng:-0.0874 },
+  { world:null,na:2,  name:"Superbueno",         city:"New York",    addr:"113 Ave B, New York, NY 10009",                  topDrink:"Chilhuacle Sour",          orders:187, badge:"NA #2 · Best Bar NE USA",       lat:40.7265, lng:-73.9808 },
+  { world:null,na:4,  name:"Jewel of the South", city:"New Orleans", addr:"1026 St Louis St, New Orleans, LA",              topDrink:"Ramos Gin Fizz",           orders:161, badge:"NA #4",                         lat:29.9589, lng:-90.0634 },
+  { world:13, na:null,name:"Connaught Bar",      city:"London",      addr:"Carlos Pl, Mayfair, London W1K 2AL",             topDrink:"Connaught Martini",        orders:201, badge:"🌍 World #13",                   lat:51.5118, lng:-0.1482 },
+  { world:14, na:null,name:"Double Chicken Please",city:"New York",  addr:"115 Allen St, New York, NY 10002",               topDrink:"Fried Chicken Colada",     orders:176, badge:"🌍 World #14",                   lat:40.7178, lng:-73.9896 },
+  { world:null,na:6,  name:"Overstory",          city:"New York",    addr:"70 Pine St 64th Fl, New York, NY",               topDrink:"Rooftop Martini",          orders:163, badge:"NA #6",                         lat:40.7074, lng:-74.0085 },
+];
+
+const BAR_TEMPLATE = {
+  desc:   "A Gaudí-inspired bar with an undulating mahogany interior. Known for exceptional Spanish-influenced cocktails and pintxos.",
+  hours:  "Mon–Fri 5pm–2am · Sat–Sun 11am–2am",
+  addr:   "505 College St, Toronto",
+  sigs: [
+    { name:"Smoked Negroni",      base:"Gin",    desc:"Cherry-wood smoked, Campari, sweet vermouth", likes:142 },
+    { name:"Basque Sour",         base:"Pisco",  desc:"Pisco, lemon, egg white, Basque bitters",     likes:89  },
+    { name:"Raval Old Fashioned", base:"Whisky", desc:"Rye, Pedro Ximénez, orange bitters",          likes:67  },
+  ],
+  orders: [
+    { id:10, name:"Smoked Negroni",      liked:true,  rating:5, note:"Perfect smoke, rich bitterness.", date:"Apr 22" },
+    { id:11, name:"Raval Old Fashioned", liked:true,  rating:4, note:"The sherry note is genius.",      date:"Mar 15" },
+    { id:12, name:"Basque Sour",         liked:false, rating:2, note:"Egg white not for me.",           date:"Feb 28" },
+  ],
+};
+
+/* ─── Icons ─── */
+const I = {
+  trail:   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M4 16c0-1.5 1-2 2-2s2 1 2 2.5S7 19 6 19s-2-1.5-2-3z"/><path d="M16 8c0-1.5 1-2 2-2s2 1 2 2.5S19 11 18 11s-2-1.5-2-3z"/><path d="M9 10.5L14 7M10 16.5L15 13"/></svg>,
+  home:    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+  explore: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+  saved:   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>,
+  profile: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>,
+  back:    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><polyline points="15 18 9 12 15 6"/></svg>,
+  plus:    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  camera:  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>,
+  x:       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  pin:     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>,
+  clock:   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+  map:     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>,
+  save:    (on) => <svg width="16" height="16" viewBox="0 0 24 24" fill={on ? C.amber : "none"} stroke={on ? C.amber : C.muted} strokeWidth="1.6"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>,
+  heart:   (on) => <svg width="15" height="15" viewBox="0 0 24 24" fill={on?C.red:"none"} stroke={on?C.red:C.muted} strokeWidth="1.6"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>,
+  chat:    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>,
+  share:   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
+  trophy:  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M6 9H4a2 2 0 01-2-2V5h4"/><path d="M18 9h2a2 2 0 002-2V5h-4"/><path d="M12 17v4"/><path d="M8 21h8"/><path d="M6 5h12v7a6 6 0 01-12 0z"/></svg>,
+  bell:    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>,
+  star:    (on,s=13) => <svg width={s} height={s} viewBox="0 0 24 24" fill={on?C.amber:"none"} stroke={on?C.amber:C.muted} strokeWidth="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+  check:   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>,
+};
+
+/* ─── Atoms ─── */
+const Sep = () => <div style={{height:1,background:C.border}}/>;
+
+const Avatar = ({u,size=36}) => (
+  <div style={{width:size,height:size,borderRadius:"50%",background:`${u.hue}22`,border:`2px solid ${u.hue}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*.33,color:u.hue,fontWeight:600,flexShrink:0}}>
+    {u.initials}
+  </div>
+);
+
+const StarRow = ({n,size=12}) => (
+  <span style={{display:"flex",gap:2}}>{[1,2,3,4,5].map(i=><span key={i}>{I.star(i<=n,size)}</span>)}</span>
+);
+
+const Chip = ({children,active,onClick}) => (
+  <span onClick={onClick} style={{fontSize:12,padding:"6px 14px",borderRadius:20,border:`1.5px solid ${active?C.amber:C.border}`,color:active?C.amberD:C.muted,background:active?C.cream:"transparent",whiteSpace:"nowrap",cursor:"pointer",fontWeight:active?600:400,transition:"all .15s"}}>
+    {children}
+  </span>
+);
+
+/* ─── Mini Map (SVG-based, no API key needed) ─── */
+function MiniMap({bars, height=220, onBarClick}) {
+  if (!bars || bars.length === 0) return null;
+
+  // Project lat/lng to SVG coords
+  const lats = bars.map(b=>b.lat||b.lat);
+  const lngs = bars.map(b=>b.lng||b.lng);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const pad = 0.003;
+  const W = 390, H = height;
+
+  const project = (lat, lng) => ({
+    x: ((lng - minLng + pad) / (maxLng - minLng + pad*2)) * (W - 40) + 20,
+    y: ((maxLat - lat + pad) / (maxLat - minLat + pad*2)) * (H - 40) + 20,
+  });
+
+  const points = bars.map(b => ({ ...b, ...project(b.lat, b.lng) }));
+
+  return (
+    <div style={{background:C.faint,borderRadius:16,overflow:"hidden",margin:"0 0 2px",border:`1px solid ${C.border}`}}>
+      {/* Map background — simple street-map feel */}
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{display:"block",background:"#E8E0D0"}}>
+        {/* grid lines suggesting streets */}
+        {[0.2,0.4,0.6,0.8].map(t=>(
+          <g key={t}>
+            <line x1={W*t} y1={0} x2={W*t} y2={H} stroke="#D0C5B0" strokeWidth="5"/>
+            <line x1={0} y1={H*t} x2={W} y2={H*t} stroke="#D0C5B0" strokeWidth="5"/>
+          </g>
+        ))}
+        {/* connecting lines between bars */}
+        {points.length > 1 && points.map((p,i) => i < points.length-1 && (
+          <line key={i} x1={p.x} y1={p.y} x2={points[i+1].x} y2={points[i+1].y}
+            stroke={C.amber} strokeWidth="1.5" strokeDasharray="4 3" opacity="0.5"/>
+        ))}
+        {/* bar pins */}
+        {points.map((p, i) => (
+          <g key={p.id||p.name} onClick={()=>onBarClick&&onBarClick(p)} style={{cursor:"pointer"}}>
+            <circle cx={p.x} cy={p.y} r="14" fill={C.amber} opacity="0.15"/>
+            <circle cx={p.x} cy={p.y} r="8"  fill={C.amber}/>
+            <circle cx={p.x} cy={p.y} r="3"  fill="#fff"/>
+            {/* label */}
+            <text x={p.x} y={p.y+22} textAnchor="middle" fontSize="9" fill={C.body} fontFamily="system-ui"
+              style={{pointerEvents:"none"}}>
+              {p.name?.split(" ").slice(0,2).join(" ")}
+            </text>
+          </g>
+        ))}
+      </svg>
+      <div style={{padding:"8px 14px",fontSize:11,color:C.muted,display:"flex",justifyContent:"space-between"}}>
+        <span>Tap a pin to view bar</span>
+        <span>{bars.length} location{bars.length>1?"s":""}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Feed Card ─── */
+function CheckinCard({item, onBarTap}) {
+  const [liked,setLiked] = useState(false);
+  const [count,setCount] = useState(item.likes);
+  return (
+    <div style={{background:C.card,borderBottom:`1px solid ${C.border}`}}>
+      <div style={{padding:"16px 18px"}}>
+        <div style={{display:"flex",gap:11,alignItems:"flex-start"}}>
+          <Avatar u={item.user}/>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{margin:0,fontSize:14,color:C.dark,lineHeight:1.45}}>
+              <span style={{color:C.amberD,fontWeight:600}}>{item.user.name}</span>
+              {" ordered at "}
+              <span style={{color:C.dark,textDecoration:"underline",textDecorationColor:C.border,cursor:"pointer"}} onClick={()=>onBarTap(item.barId)}>
+                {item.bar}
+              </span>
+            </p>
+            <p style={{margin:"3px 0 0",fontSize:11,color:C.muted,display:"flex",alignItems:"center",gap:4}}>
+              {I.pin} {item.area} · {item.time}
+            </p>
+          </div>
+        </div>
+
+        <div style={{marginTop:12,marginLeft:47,background:C.faint,borderRadius:12,padding:"12px 14px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <div style={{fontSize:17,color:C.dark,fontWeight:500}}>{item.drink}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
+                <span style={{fontSize:11,color:C.amberD,fontWeight:600,letterSpacing:".06em"}}>{item.base}</span>
+                <StarRow n={item.rating}/>
+              </div>
+            </div>
+            <div style={{fontSize:22}}>🍸</div>
+          </div>
+          {item.note && <p style={{margin:"8px 0 0",fontSize:13,color:C.muted,lineHeight:1.6,fontStyle:"italic"}}>"{item.note}"</p>}
+          <p style={{margin:"6px 0 0",fontSize:11,color:C.muted}}>{item.likes + 7} people ordered this recently</p>
+        </div>
+
+        <div style={{display:"flex",gap:20,marginTop:12,marginLeft:47}}>
+          <button onClick={()=>{setLiked(l=>!l);setCount(c=>liked?c-1:c+1);}} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,color:liked?C.red:C.muted,fontSize:13,fontFamily:"inherit",padding:0}}>
+            {I.heart(liked)} {count}
+          </button>
+          <button style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,color:C.muted,fontSize:13,fontFamily:"inherit",padding:0}}>
+            {I.chat} {item.comments}
+          </button>
+          <button style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:C.muted,padding:0}}>{I.share}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Bar Row ─── */
+function BarRow({bar, onTap, onSave}) {
+  return (
+    <div onClick={onTap} style={{display:"flex",gap:14,alignItems:"center",padding:"13px 18px",cursor:"pointer",background:C.card,borderBottom:`1px solid ${C.border}`}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:7}}>
+          {bar.visited && <div style={{width:6,height:6,borderRadius:"50%",background:C.green,flexShrink:0}}/>}
+          <span style={{fontSize:15,color:C.dark,fontWeight:500}}>{bar.name}</span>
+        </div>
+        <div style={{fontSize:12,color:C.muted,marginTop:2,display:"flex",gap:4,alignItems:"center"}}>
+          {I.pin} {bar.area} · {bar.dist}
+        </div>
+        {bar.rankLabel && <div style={{fontSize:11,color:C.amberD,marginTop:3,fontWeight:500}}>🏅 {bar.rankLabel}</div>}
+        {bar.visited && bar.topDrink
+          ? <div style={{fontSize:12,color:C.amberD,marginTop:3}}>★ {bar.topDrink}</div>
+          : bar.topDrink
+          ? <div style={{fontSize:12,color:C.muted,marginTop:3}}>Most ordered: {bar.topDrink}</div>
+          : null}
+      </div>
+      <button onClick={e=>{e.stopPropagation();onSave(bar.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:4}}>
+        {I.save(bar.saved)}
+      </button>
+    </div>
+  );
+}
+
+/* ─── HOME TAB ─── */
+// My orders per bar — keyed by bar id
+const MY_ORDERS = {
+  1: [ // Bar Raval
+    { id:1, name:"Smoked Negroni",      liked:true,  rating:5, date:"Apr 22", note:"Perfect smoke, rich bitterness." },
+    { id:2, name:"Raval Old Fashioned", liked:true,  rating:4, date:"Mar 15", note:"The sherry note is genius." },
+    { id:3, name:"Basque Sour",         liked:false, rating:2, date:"Feb 28", note:"Egg white not for me." },
+  ],
+  5: [ // Pimm's Bar
+    { id:4, name:"Yuzu Sour",   liked:true,  rating:4, date:"Apr 10", note:"Refreshing and well-balanced." },
+    { id:5, name:"Classic G&T", liked:true,  rating:3, date:"Jan 20", note:null },
+  ],
+  20: [ // Double Chicken Please (NY)
+    { id:6, name:"Fried Chicken Colada", liked:true, rating:5, date:"Mar 2", note:"Wildly creative. Actually works." },
+  ],
+};
+
+function OrderDetail({order, onClose}) {
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:300,display:"flex",alignItems:"flex-end",maxWidth:430,left:"50%",transform:"translateX(-50%)"}}>
+      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",padding:"20px 20px 40px",maxHeight:"80vh",overflowY:"auto"}}>
+        <div style={{width:32,height:3,background:C.border,borderRadius:2,margin:"0 auto 18px"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+          <div>
+            <div style={{fontSize:19,fontWeight:700,color:C.dark}}>{order.name}</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:2}}>{order.date}</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.muted,padding:4}}>{I.x}</button>
+        </div>
+
+        {/* Photo */}
+        {order.photo && (
+          <img src={order.photo} alt={order.name}
+            style={{width:"100%",borderRadius:12,objectFit:"cover",maxHeight:220,display:"block",marginBottom:14,border:`1px solid ${C.border}`}}/>
+        )}
+        {!order.photo && (
+          <div style={{width:"100%",height:120,borderRadius:12,background:C.faint,border:`1.5px dashed ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:14,color:C.muted,fontSize:13}}>
+            No photo
+          </div>
+        )}
+
+        {/* Rating + liked */}
+        <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:12}}>
+          <span style={{fontSize:22}}>{order.liked===true?"👍":order.liked===false?"👎":"·"}</span>
+          {order.rating>0 && <div style={{display:"flex",gap:3}}>{[1,2,3,4,5].map(i=><span key={i}>{I.star(i<=order.rating,16)}</span>)}</div>}
+        </div>
+
+        {/* Note */}
+        {order.note
+          ? <div style={{background:C.faint,borderRadius:10,padding:"12px 14px"}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:".1em",textTransform:"uppercase",marginBottom:6}}>Tasting notes</div>
+              <p style={{fontSize:14,color:C.body,lineHeight:1.75,margin:0,fontStyle:"italic"}}>"{order.note}"</p>
+            </div>
+          : <div style={{fontSize:13,color:C.muted,fontStyle:"italic"}}>No tasting notes.</div>
+        }
+      </div>
+    </div>
+  );
+}
+
+function VisitedBarCard({bar, onTap}) {
+  const orders = MY_ORDERS[bar.id] || [];
+  const [showAll, setShowAll]       = useState(false);
+  const [activeOrder, setActiveOrder] = useState(null);
+
+  const displayOrders = showAll ? orders : orders.slice(0,2);
+
+  return (
+    <div style={{background:C.card,borderBottom:`1px solid ${C.border}`}}>
+      {/* Bar header */}
+      <div style={{display:"flex",gap:14,alignItems:"flex-start",padding:"14px 18px 10px",cursor:"pointer"}} onClick={onTap}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:7}}>
+            <div style={{width:7,height:7,borderRadius:"50%",background:C.green,flexShrink:0}}/>
+            <span style={{fontSize:16,color:C.dark,fontWeight:600}}>{bar.name}</span>
+          </div>
+          <div style={{fontSize:12,color:C.muted,marginTop:2,display:"flex",gap:4,alignItems:"center"}}>
+            {I.pin} {bar.area}{bar.dist&&bar.dist!=="—"?` · ${bar.dist}`:""}
+            {bar.city&&bar.city!=="Toronto"&&<span style={{marginLeft:4,fontSize:10,background:C.faint,padding:"1px 7px",borderRadius:20,color:C.muted}}>{bar.city}</span>}
+          </div>
+          {bar.rankLabel && <div style={{fontSize:11,color:C.amberD,marginTop:3,fontWeight:500}}>🏅 {bar.rankLabel}</div>}
+        </div>
+        <div style={{textAlign:"right",flexShrink:0}}>
+          <div style={{fontSize:12,color:C.muted}}>{orders.length} order{orders.length!==1?"s":""}</div>
+          {bar.myRating && <div style={{display:"flex",justifyContent:"flex-end",gap:2,marginTop:3}}>{[1,2,3,4,5].map(i=><span key={i}>{I.star(i<=bar.myRating,11)}</span>)}</div>}
+        </div>
+      </div>
+
+      {orders.length > 0 && (
+        <div style={{margin:"0 18px",borderTop:`1px solid ${C.border}`,paddingTop:10,paddingBottom:12}}>
+          <div style={{fontSize:10,color:C.muted,letterSpacing:".08em",textTransform:"uppercase",marginBottom:8}}>What I ordered</div>
+          <div style={{display:"flex",flexDirection:"column",gap:0}}>
+            {displayOrders.map(o=>(
+              <div key={o.id}
+                onClick={e=>{e.stopPropagation();setActiveOrder(o);}}
+                style={{display:"flex",gap:10,alignItems:"flex-start",padding:"8px 10px",borderRadius:10,cursor:"pointer",marginBottom:2,background:"transparent",transition:"background .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.background=C.faint}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+              >
+                <span style={{fontSize:14,flexShrink:0}}>{o.liked===true?"👍":o.liked===false?"👎":"·"}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:13,color:C.dark,fontWeight:500}}>{o.name}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:8}}>
+                      {o.photo && <span style={{fontSize:10,color:C.muted}}>📷</span>}
+                      <span style={{fontSize:11,color:C.muted}}>{o.date}</span>
+                      <span style={{fontSize:11,color:C.amber}}>›</span>
+                    </div>
+                  </div>
+                  {o.note && <div style={{fontSize:12,color:C.muted,marginTop:1,fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>"{o.note}"</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {orders.length > 2 && (
+            <button onClick={e=>{e.stopPropagation();setShowAll(x=>!x);}} style={{background:"none",border:"none",cursor:"pointer",color:C.amber,fontSize:12,padding:"4px 0",fontFamily:"inherit",fontWeight:500}}>
+              {showAll ? "Show less ↑" : `+${orders.length-2} more orders`}
+            </button>
+          )}
+
+          {bar.topDrink && (
+            <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:10,color:C.muted,letterSpacing:".08em",textTransform:"uppercase"}}>Most ordered here</span>
+              <span style={{fontSize:12,color:C.amberD,fontWeight:500}}>★ {bar.topDrink}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeOrder && <OrderDetail order={activeOrder} onClose={()=>setActiveOrder(null)}/>}
+    </div>
+  );
+}
+
+function HomeTab({bars, setBars, onBarTap, userCity="Toronto", userTastes=[], onGoExplore}) {
+  const allMapped = [...ALL_BARS].map(n=>bars.find(b=>b.id===n.id)||n);
+  const visited   = allMapped.filter(b=>b.visited);
+
+  // Has the user checked in anywhere in their CURRENTLY SELECTED city?
+  const visitedInCurrentCity = visited.filter(b=>(b.city||"Toronto")===userCity);
+
+  // Other cities where the user has check-ins (for cross-city trail summary)
+  const otherCities = [...new Set(visited.filter(b=>(b.city||"Toronto")!==userCity).map(b=>b.city||"Toronto"))];
+
+  return (
+    <div style={{paddingBottom:88}}>
+      {/* Sticky header */}
+      <div style={{position:"sticky",top:0,zIndex:40,background:`${C.bg}F8`,backdropFilter:"blur(14px)",borderBottom:`1px solid ${C.border}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 18px 14px"}}>
+          <div>
+            <div style={{fontSize:11,color:C.muted,letterSpacing:".12em",textTransform:"uppercase"}}>📍 {userCity}</div>
+            <div style={{fontSize:22,color:C.dark,fontWeight:700,letterSpacing:".01em",marginTop:1}}>My Trail</div>
+          </div>
+          <div style={{display:"flex",gap:12,alignItems:"center"}}>
+            <button style={{background:"none",border:"none",cursor:"pointer",color:C.muted,padding:2}}>{I.bell}</button>
+            <div style={{width:32,height:32,borderRadius:"50%",background:`${C.amber}33`,border:`2px solid ${C.amber}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:C.amberD,fontWeight:700}}>Me</div>
+          </div>
+        </div>
+      </div>
+
+      {visitedInCurrentCity.length === 0 ? (
+        /* Empty state — point user to Explore, don't duplicate its content */
+        <div style={{padding:"40px 24px",textAlign:"center"}}>
+          <div style={{fontSize:44,marginBottom:14}}>🍸</div>
+          <div style={{fontSize:17,fontWeight:700,color:C.dark,marginBottom:6}}>No stops yet in {userCity}</div>
+          <div style={{fontSize:13,color:C.muted,lineHeight:1.7,marginBottom:20,maxWidth:280,marginLeft:"auto",marginRight:"auto"}}>
+            Your trail starts the moment you check in somewhere. Head to Explore to find a great bar nearby.
+          </div>
+          <button onClick={onGoExplore}
+            style={{background:C.amber,color:"#fff",border:"none",borderRadius:10,padding:"12px 28px",fontSize:14,fontFamily:"inherit",cursor:"pointer",fontWeight:700,display:"inline-flex",alignItems:"center",gap:8}}>
+            {I.explore} Explore {userCity}
+          </button>
+
+          {/* If they have a trail elsewhere, surface it so it's not "lost" */}
+          {otherCities.length > 0 && (
+            <div style={{marginTop:32,paddingTop:20,borderTop:`1px solid ${C.border}`}}>
+              <div style={{fontSize:11,color:C.muted,letterSpacing:".1em",textTransform:"uppercase",marginBottom:10}}>Your trail elsewhere</div>
+              {otherCities.map(city=>(
+                <div key={city} style={{fontSize:13,color:C.body,marginBottom:4}}>
+                  📍 {city} — {visited.filter(b=>(b.city||"Toronto")===city).length} stop{visited.filter(b=>(b.city||"Toronto")===city).length>1?"s":""}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          {/* Trail summary */}
+          <div style={{padding:"16px 18px 4px",fontSize:13,color:C.muted}}>
+            {visitedInCurrentCity.length} stop{visitedInCurrentCity.length>1?"s":""} in {userCity} so far
+          </div>
+          {visitedInCurrentCity.sort((a,b)=>parseFloat(a.dist||99)-parseFloat(b.dist||99)).map(bar=><VisitedBarCard key={bar.id} bar={bar} onTap={()=>onBarTap(bars.find(b=>b.id===bar.id)||bar)}/>)}
+        </div>
+      )}
+
+      {/* Activity feed — always shown, it's social not city-specific */}
+      <div style={{height:8,background:C.surface}}/>
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"18px 18px 12px"}}>
+        <div style={{flex:1,height:1,background:C.border}}/>
+        <span style={{fontSize:11,color:C.muted,letterSpacing:".1em",textTransform:"uppercase",whiteSpace:"nowrap"}}>Friend Activity</span>
+        <div style={{flex:1,height:1,background:C.border}}/>
+      </div>
+      {FEED.map(item=><CheckinCard key={item.id} item={item} onBarTap={id=>onBarTap(bars.find(b=>b.id===id)||ALL_BARS.find(b=>b.id===id))}/>)}
+      <div style={{textAlign:"center",padding:"20px 0 4px"}}>
+        <button style={{background:"none",border:`1.5px solid ${C.border}`,borderRadius:20,padding:"8px 24px",color:C.muted,fontSize:12,fontFamily:"inherit",cursor:"pointer"}}>Load more</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── City Trending Data ─── */
+const TRENDING_BARS = [
+  { id:1,  name:"Bar Raval",       area:"Little Italy",  tags:["Speakeasy","Cocktails"],   checkins:341, trending:"Hot",      topDrink:"Smoked Negroni",      heat:5, lat:43.6547, lng:-79.4193, happyHour:"Mon–Fri 5–7pm · 20% off cocktails" },
+  { id:7,  name:"Bar Pompette",    area:"Little Italy",  tags:["French","Seasonal"],       checkins:298, trending:"Ranked",   topDrink:"Cornichon Martini",   heat:5, lat:43.6553, lng:-79.4196, happyHour:null },
+  { id:10, name:"Rosalinda",       area:"Financial Dist",tags:["Plant-based","Mezcal"],    checkins:234, trending:"Rising",   topDrink:"Spicy Mezcal Marg",   heat:4, lat:43.6498, lng:-79.3821, happyHour:"Mon–Fri 4–6pm · $9 cocktails" },
+  { id:11, name:"Pretty Ugly",     area:"Kensington",    tags:["Dive Bar","Natural Wine"], checkins:210, trending:"New",      topDrink:"Natural Wine Negroni",heat:4, lat:43.6543, lng:-79.4022, happyHour:"Daily 5–8pm · $2 off all drinks" },
+  { id:3,  name:"Civil Liberties", area:"Annex",         tags:["Speakeasy","No menu"],     checkins:198, trending:"Ranked",   topDrink:"Bespoke cocktail",    heat:4, lat:43.6621, lng:-79.4269, happyHour:null },
+  { id:12, name:"DaiLo",           area:"Little Italy",  tags:["Asian-fusion","Cocktails"],checkins:187, trending:"Rising",   topDrink:"Lychee Martini",      heat:3, lat:43.6549, lng:-79.4187, happyHour:"Tue–Sat 5–7pm · $10 cocktails" },
+  { id:4,  name:"El Rey",          area:"Kensington",    tags:["Mezcal","Natural Wine"],   checkins:163, trending:"Steady",   topDrink:"Oaxacan Mule",        heat:3, lat:43.6551, lng:-79.4091, happyHour:"Wed–Sun 6–8pm · Mezcal specials" },
+  { id:13, name:"Employees Only",  area:"Queen West",    tags:["Cocktails","Late Night"],  checkins:154, trending:"Hot",      topDrink:"Mata Hari",           heat:3, lat:43.6477, lng:-79.4123, happyHour:"Mon–Fri 5–7pm · $12 classics" },
+  { id:5,  name:"Pimm's Bar",      area:"Distillery",    tags:["Rooftop","Classic"],       checkins:132, trending:"Steady",   topDrink:"Yuzu Sour",           heat:2, lat:43.6504, lng:-79.3591, happyHour:"Daily 4–6pm · half-price bites" },
+  { id:14, name:"Stay & Play",     area:"Chinatown",     tags:["Dive","Karaoke"],          checkins:118, trending:"New",      topDrink:"House Sour",          heat:2, lat:43.6529, lng:-79.4018, happyHour:"Daily 5–9pm · $6 house drinks" },
+];
+
+/* ─── City Data — World's 50 Best Bars 2021–2025 ─── */
+const CITY_DATA = {
+  /* ── Canada ── */
+  "Toronto": [
+    { id:1,  name:"Bar Raval",       area:"Little Italy", tags:["Speakeasy","Cocktails"],   checkins:341, trending:"Hot",    topDrink:"Smoked Negroni",    heat:5, happyHour:null,                                rankLabel:null,                                               lat:43.6547, lng:-79.4193 },
+    { id:7,  name:"Bar Pompette",    area:"Little Italy", tags:["French","Seasonal"],       checkins:298, trending:"Ranked", topDrink:"Cornichon Martini", heat:5, happyHour:null,                                rankLabel:"#55 · 2025  ·  #70 · 2024  ·  Best Bar in Canada 2024–25", lat:43.6553, lng:-79.4196 },
+    { id:3,  name:"Civil Liberties", area:"Annex",        tags:["Speakeasy","No menu"],     checkins:198, trending:"Ranked", topDrink:"Bespoke cocktail",  heat:4, happyHour:null,                                rankLabel:"#15 · 2025  ·  #21 · 2024",                    lat:43.6621, lng:-79.4269 },
+    { id:8,  name:"Library Bar",     area:"Downtown",     tags:["Hotel Bar","Classic"],     checkins:134, trending:"Ranked", topDrink:"Birdbath Martini",  heat:3, happyHour:null,                                rankLabel:"#19 · 2024",                                    lat:43.6476, lng:-79.3825 },
+    { id:9,  name:"Mother",          area:"Parkdale",     tags:["Neighbourhood","Casual"],  checkins:98,  trending:"Ranked", topDrink:"House Daiquiri",    heat:3, happyHour:null,                                rankLabel:"#22 · 2024",                                    lat:43.6482, lng:-79.4431 },
+    { id:2,  name:"Labora",          area:"King West",    tags:["Wine Bar","Cocktails"],    checkins:156, trending:"Hot",    topDrink:"Lavender Gimlet",   heat:3, happyHour:"Mon–Fri 5–7pm · $10 cocktails",   rankLabel:null,                                               lat:43.6445, lng:-79.4049 },
+    { id:10, name:"Rosalinda",       area:"Financial Dist",tags:["Plant-based","Mezcal"],  checkins:234, trending:"Rising", topDrink:"Spicy Mezcal Marg", heat:4, happyHour:"Wed–Fri 5–7pm · $12 cocktails",   rankLabel:null,                                               lat:43.6498, lng:-79.3821 },
+    { id:11, name:"Pretty Ugly",     area:"Kensington",   tags:["Dive Bar","Natural Wine"], checkins:210, trending:"New",   topDrink:"Natural Wine Negroni",heat:4,happyHour:"Daily 5–8pm · $9 drinks",         rankLabel:null,                                               lat:43.6543, lng:-79.4022 },
+    { id:4,  name:"El Rey",          area:"Kensington",   tags:["Mezcal","Natural Wine"],  checkins:163, trending:"Steady", topDrink:"Oaxacan Mule",      heat:3, happyHour:null,                                rankLabel:null,                                               lat:43.6551, lng:-79.4091 },
+    { id:5,  name:"Pimm's Bar",      area:"Distillery",   tags:["Rooftop","Classic"],      checkins:132, trending:"Steady", topDrink:"Yuzu Sour",         heat:2, happyHour:"Fri–Sun 5–7pm · $10 cocktails",   rankLabel:null,                                               lat:43.6504, lng:-79.3591 },
+  ],
+  "Montreal": [
+    { id:101, name:"Atwater Cocktail Club", area:"St-Henri",  tags:["NA#42","Cocktails"],   checkins:198, trending:"Ranked", topDrink:"House Old Fashioned",  heat:4, happyHour:"Tue–Fri 5–7pm · $10 cocktails",
+      rankLabel:"#42 · 2025  ·  #50 · 2024", lat:45.4741, lng:-73.5796 },
+    { id:102, name:"Bar Le Mal Nécessaire",  area:"Chinatown", tags:["Tiki","Fun"],          checkins:176, trending:"Hot",    topDrink:"Tropical Punch",       heat:4, happyHour:"Daily 5–8pm · $8 drinks",        rankLabel:null, lat:45.5088, lng:-73.5617 },
+    { id:103, name:"Le Lab Comptoir",         area:"Plateau",   tags:["Creative","Local"],    checkins:143, trending:"Steady",topDrink:"Seasonal Spritz",      heat:3, happyHour:"Mon–Thu 5–7pm",                  rankLabel:null, lat:45.5231, lng:-73.5822 },
+  ],
+  "Vancouver": [
+    { id:110, name:"Botanist Bar",  area:"Downtown",  tags:["Hotel","Botanical"],   checkins:221, trending:"Hot",    topDrink:"Foraged Sour",       heat:5, happyHour:"Daily 4–6pm · $12 cocktails", rankLabel:null, lat:49.2849, lng:-123.1208 },
+    { id:111, name:"Automatic",     area:"Gastown",   tags:["Speakeasy","Classic"], checkins:187, trending:"Rising",topDrink:"Rye Manhattan",       heat:4, happyHour:"Mon–Fri 5–7pm",               rankLabel:null, lat:49.2840, lng:-123.1073 },
+    { id:112, name:"The Diamond",   area:"Gastown",   tags:["Rooftop","Cocktails"], checkins:163, trending:"Steady",topDrink:"Gastown Mule",        heat:3, happyHour:"Sun–Thu 5–7pm · $9 drinks",  rankLabel:null, lat:49.2841, lng:-123.1063 },
+  ],
+
+  /* ── USA — Northeast ── */
+  "New York": [
+    { id:200, name:"Sip & Guzzle",          area:"West Village",    tags:["Whisky","Highballs"],     checkins:445, trending:"Hot",    topDrink:"Japanese Highball",     heat:5, happyHour:null,
+      rankLabel:"#1 · 2025  ·  #39 · 2025  ·  Best New Opening 2025", lat:40.7335, lng:-74.0041 },
+    { id:201, name:"Double Chicken Please", area:"Lower East Side", tags:["Creative","Cocktails"],   checkins:432, trending:"Ranked",topDrink:"Fried Chicken Colada",  heat:5, happyHour:null,
+      rankLabel:"#41 · 2025  ·  #14 · 2024  ·  #2 · 2023  ·  Best Bar N.America 2023", lat:40.7178, lng:-73.9896 },
+    { id:202, name:"Superbueno",            area:"East Village",    tags:["Latin","Mexican-American"],checkins:398, trending:"Ranked",topDrink:"Roasted Corn Sour",    heat:5, happyHour:"Mon–Fri 5–7pm · $10 cocktails",
+      rankLabel:"#12 · 2025  ·  #27 · 2024  ·  Best New Opening 2024", lat:40.7265, lng:-73.9808 },
+    { id:203, name:"Overstory",             area:"Financial Dist",  tags:["Rooftop","Upscale"],      checkins:387, trending:"Ranked",topDrink:"Rooftop Martini",       heat:5, happyHour:null,
+      rankLabel:"#46 · 2025  ·  #15 · 2024  ·  #17 · 2023", lat:40.7074, lng:-74.0085 },
+    { id:204, name:"Martiny's",             area:"Gramercy",        tags:["Japanese","Cocktails"],   checkins:356, trending:"Ranked",topDrink:"Sesame Old Fashioned",  heat:4, happyHour:null,
+      rankLabel:"#75 · 2025  ·  #24 · 2024  ·  #68 · 2023  ·  Highest Climber 2024", lat:40.7340, lng:-74.0046 },
+    { id:205, name:"Katana Kitten",         area:"West Village",    tags:["Japanese","Gin"],         checkins:334, trending:"Ranked",topDrink:"Yuzu Highball",         heat:4, happyHour:"Mon–Fri 5–7pm · $12 cocktails",
+      rankLabel:"#12 · 2024  ·  #27 · 2023  ·  #9 · 2022", lat:40.7334, lng:-74.0027 },
+    { id:206, name:"Attaboy",               area:"Lower East Side", tags:["Speakeasy","No menu"],    checkins:312, trending:"Ranked",topDrink:"Bartender's choice",   heat:4, happyHour:null,
+      rankLabel:"#72 · 2025  ·  #84 · 2024  ·  #57 · 2023", lat:40.7195, lng:-73.9882 },
+    { id:207, name:"Employees Only",        area:"West Village",    tags:["Classic","Late Night"],   checkins:298, trending:"Ranked",topDrink:"Mata Hari",             heat:4, happyHour:"Daily 5–7pm · $14 cocktails",
+      rankLabel:"#95 · 2025  ·  #97 · 2024  ·  #99 · 2023", lat:40.7340, lng:-74.0054 },
+    { id:208, name:"Dante",                 area:"Greenwich Vil.",  tags:["Italian","Aperitivo"],    checkins:276, trending:"Ranked",topDrink:"Negroni",               heat:4, happyHour:"Mon–Fri 3–5pm · $13 cocktails",
+      rankLabel:"#20 · 2024  ·  #29 · 2022", lat:40.7297, lng:-74.0028 },
+    { id:209, name:"Schmuck",               area:"East Village",    tags:["Playful","Creative"],     checkins:234, trending:"Hot",   topDrink:"House Martini",         heat:4, happyHour:"Daily 5–7pm · $12 cocktails",
+      rankLabel:"#4 · 2025  ·  #59 · 2025  ·  NA Best New Opening 2025 (NA)", lat:40.7276, lng:-73.9832 },
+    { id:210, name:"Dead Rabbit",           area:"Financial Dist",  tags:["Irish","Heritage"],       checkins:254, trending:"Ranked",topDrink:"Irish Coffee",          heat:3, happyHour:"Mon–Fri 11am–5pm",
+      rankLabel:"#33 · 2024  ·  #46 · 2022", lat:40.7037, lng:-74.0128 },
+    { id:211, name:"Maison Premiere",       area:"Williamsburg",    tags:["Oyster Bar","Absinthe"],  checkins:223, trending:"Steady",topDrink:"Absinthe Drip",        heat:3, happyHour:"Daily 4–7pm · $11 cocktails",
+      rankLabel:"#41 · 2024  ·  #91 · 2023  ·  #30 · 2022", lat:40.7140, lng:-73.9631 },
+    { id:212, name:"Bar Snack",             area:"West Village",    tags:["New","Creative"],         checkins:187, trending:"Hot",   topDrink:"Rotating seasonal",     heat:4, happyHour:null,
+      rankLabel:"#3 · 2025", lat:40.7335, lng:-74.0041 },
+    { id:213, name:"Angel's Share",        area:"East Village",    tags:["Japanese","Hidden"],      checkins:176, trending:"Steady",topDrink:"Japanese Whisky Cocktail",heat:3, happyHour:null,
+      rankLabel:"#43 · 2024", lat:40.7266, lng:-73.9860 },
+  ],
+  "Boston": [
+    { id:220, name:"Drink",      area:"Fort Point",    tags:["No menu","Classic"],  checkins:198, trending:"Hot",   topDrink:"Bartender's choice", heat:4, happyHour:null,                             rankLabel:null, lat:42.3488, lng:-71.0486 },
+    { id:221, name:"Backbar",    area:"Union Square",  tags:["Creative","Somerville"],checkins:165,trending:"Rising",topDrink:"Paper Plane",         heat:4, happyHour:"Mon–Fri 5–7pm · $9 drinks",    rankLabel:null, lat:42.3787, lng:-71.0979 },
+  ],
+  "Washington DC": [
+    { id:230, name:"Service Bar", area:"Shaw",         tags:["Highballs","Casual"],  checkins:245, trending:"Ranked",topDrink:"Highball Flight",     heat:5, happyHour:"Mon–Fri 5–7pm · $9 highballs",
+      rankLabel:"#11 · 2025  ·  #22 · 2024", lat:38.9171, lng:-77.0229 },
+    { id:231, name:"Allegory",    area:"Logan Circle", tags:["Hotel","Creative"],    checkins:221, trending:"Ranked",topDrink:"Narrative Cocktail",  heat:4, happyHour:null,
+      rankLabel:"#23 · 2024", lat:38.9096, lng:-77.0298 },
+    { id:232, name:"Columbia Room",area:"Blagden Alley",tags:["Tasting menu","Upscale"],checkins:187,trending:"Steady",topDrink:"Seasonal pairing",  heat:4, happyHour:null,                            rankLabel:null, lat:38.9096, lng:-77.0218 },
+  ],
+  "Philadelphia": [
+    { id:240, name:"Hop Sing Laundromat", area:"Chinatown",  tags:["Speakeasy","No phone"], checkins:187, trending:"Hot",   topDrink:"Secret menu", heat:4, happyHour:null,                rankLabel:null, lat:39.9526, lng:-75.1558 },
+    { id:241, name:"R&D",                 area:"Old City",   tags:["Creative","Seasonal"],  checkins:132, trending:"Rising",topDrink:"Rotating menu",heat:3, happyHour:"Wed–Fri 5–7pm", rankLabel:null, lat:39.9507, lng:-75.1455 },
+  ],
+
+  /* ── USA — South ── */
+  "New Orleans": [
+    { id:250, name:"Jewel of the South", area:"French Quarter", tags:["Heritage","Classic"],  checkins:376, trending:"Ranked",topDrink:"Ramos Gin Fizz", heat:5, happyHour:null,
+      rankLabel:"#44 · 2025  ·  #6 · 2024  ·  #34 · 2024", lat:29.9589, lng:-90.0634 },
+    { id:251, name:"Cure",               area:"Freret St",     tags:["Neighbourhood","Gin"], checkins:243, trending:"Ranked",topDrink:"Pimm's Cup",    heat:4, happyHour:"Tue–Fri 5–7pm · $8 cocktails",
+      rankLabel:"#47 · 2024", lat:29.9397, lng:-90.1078 },
+    { id:252, name:"Bar Marilou",        area:"Marigny",       tags:["Hotel","Elegant"],     checkins:198, trending:"Hot",   topDrink:"Champagne Cocktail",heat:4, happyHour:"Daily 5–7pm · $12 cocktails", rankLabel:null, lat:29.9621, lng:-90.0572 },
+  ],
+  "Miami": [
+    { id:260, name:"Café La Trova",      area:"Little Havana", tags:["Cuban","Heritage"],    checkins:312, trending:"Ranked",topDrink:"Mojito Royale", heat:5, happyHour:"Mon–Fri 4–7pm · $10 cocktails",
+      rankLabel:"#82 · 2025  ·  #13 · 2024", lat:25.7661, lng:-80.2346 },
+    { id:261, name:"The Broken Shaker",  area:"Mid Beach",     tags:["Poolside","Creative"], checkins:267, trending:"Hot",   topDrink:"Cucumber Gimlet",heat:4, happyHour:"Daily 5–7pm · $12 cocktails", rankLabel:null, lat:25.8084, lng:-80.1296 },
+  ],
+  "Nashville": [
+    { id:270, name:"The Patterson House", area:"Midtown",       tags:["Speakeasy","Classics"], checkins:198, trending:"Hot",   topDrink:"Old Fashioned", heat:4, happyHour:"Mon–Fri 5–7pm · $9 cocktails", rankLabel:null, lat:36.1512, lng:-86.7913 },
+    { id:271, name:"Attaboy Nashville",   area:"5 Points",      tags:["No menu","Creative"],   checkins:154, trending:"Rising",topDrink:"Bartender's choice",heat:3, happyHour:null, rankLabel:null, lat:36.1762, lng:-86.7521 },
+  ],
+  "Austin": [
+    { id:280, name:"Midnight Cowboy",    area:"6th Street",    tags:["Speakeasy","Bespoke"],  checkins:221, trending:"Hot",   topDrink:"Custom cocktail",heat:4, happyHour:null, rankLabel:null, lat:30.2672, lng:-97.7407 },
+    { id:281, name:"Half Step",          area:"E. 6th Street", tags:["Neighbourhood","Whisky"],checkins:187, trending:"Steady",topDrink:"Rye Sour",     heat:4, happyHour:"Daily 4–7pm · $8 cocktails", rankLabel:null, lat:30.2599, lng:-97.7290 },
+  ],
+
+  /* ── USA — Midwest ── */
+  "Chicago": [
+    { id:290, name:"Kumiko",          area:"West Loop",   tags:["Japanese","Omakase"],     checkins:312, trending:"Ranked",topDrink:"Omakase menu",     heat:5, happyHour:null,
+      rankLabel:"#10 · 2025  ·  #97 · 2025  ·  #19 · 2024", lat:41.8833, lng:-87.6479 },
+    { id:291, name:"Best Intentions", area:"Wicker Park", tags:["Neighbourhood","Fun"],    checkins:245, trending:"Ranked",topDrink:"Wondermint Malted", heat:4, happyHour:"Daily 5–7pm · $9 drinks",
+      rankLabel:"#25 · 2025  ·  #48 · 2024", lat:41.9086, lng:-87.6797 },
+    { id:292, name:"Meadowlark",      area:"West Town",   tags:["Local spirits","Creative"],checkins:223, trending:"Ranked",topDrink:"Regional Menu",    heat:4, happyHour:"Mon–Fri 5–7pm · $10 cocktails",
+      rankLabel:"#32 · 2024", lat:41.8952, lng:-87.6737 },
+    { id:293, name:"Scofflaw",        area:"Logan Square", tags:["Gin","Neighbourhood"],   checkins:187, trending:"Steady",topDrink:"Gin & Tonic flight",heat:3, happyHour:"Mon–Fri 5–7pm · $8 cocktails", rankLabel:null, lat:41.9275, lng:-87.7045 },
+  ],
+  "Detroit": [
+    { id:300, name:"Standby", area:"Downtown", tags:["Craft","Creative"], checkins:143, trending:"Rising",topDrink:"Motor City Mule", heat:3, happyHour:"Mon–Fri 4–6pm · $8 cocktails", rankLabel:null, lat:42.3314, lng:-83.0458 },
+  ],
+  "Minneapolis": [
+    { id:310, name:"Marvel Bar", area:"North Loop", tags:["Craft","Seasonal"], checkins:154, trending:"Hot", topDrink:"Seasonal cocktail", heat:3, happyHour:"Tue–Fri 5–7pm · $9 cocktails", rankLabel:null, lat:44.9847, lng:-93.2834 },
+  ],
+
+  /* ── USA — West ── */
+  "Los Angeles": [
+    { id:320, name:"Thunderbolt",           area:"Silver Lake",  tags:["Sustainability","Cocktails"],checkins:345, trending:"Ranked",topDrink:"Mezcal Thunderbolt",  heat:5, happyHour:null,
+      rankLabel:"#24 · 2025  ·  #89 · 2023  ·  NA Sustainable Bar Award 2025 (NA)", lat:34.0877, lng:-118.2688 },
+    { id:321, name:"Mírate",                area:"Los Feliz",    tags:["Mexican","Mezcal"],         checkins:287, trending:"Ranked",topDrink:"Corn Silk Margarita", heat:4, happyHour:"Mon–Fri 5–7pm · $12 cocktails",
+      rankLabel:"#93 · 2025  ·  #46 · 2024", lat:34.1050, lng:-118.2842 },
+    { id:322, name:"Here's Looking At You",area:"Koreatown",    tags:["Creative","Wine bar"],      checkins:243, trending:"Hot",   topDrink:"Seasonal cocktail",   heat:4, happyHour:"Mon–Fri 5–7pm · $10 drinks", rankLabel:null, lat:34.0592, lng:-118.3075 },
+    { id:323, name:"Harvard & Stone",       area:"Hollywood",    tags:["Dive","Live music"],        checkins:198, trending:"Steady",topDrink:"Whisky Sour",         heat:3, happyHour:"Daily 4–8pm · $8 cocktails",  rankLabel:null, lat:34.1016, lng:-118.3092 },
+  ],
+  "San Francisco": [
+    { id:330, name:"True Laurel",  area:"Mission",  tags:["Sustainable","Natural wine"], checkins:276, trending:"Ranked",topDrink:"Natural Wine Cocktail",heat:5, happyHour:null,
+      rankLabel:"#64 · 2025  ·  #30 · 2024", lat:37.7618, lng:-122.4194 },
+    { id:331, name:"Trick Dog",    area:"Mission",  tags:["Creative","Rotating"],        checkins:243, trending:"Hot",   topDrink:"Seasonal menu",        heat:4, happyHour:"Mon–Fri 4–6pm · $10 cocktails", rankLabel:null, lat:37.7598, lng:-122.4124 },
+    { id:332, name:"ABV",          area:"Mission",  tags:["Neighbourhood","Craft"],      checkins:198, trending:"Steady",topDrink:"Sloe Gin Fizz",        heat:3, happyHour:"Daily 4–6pm · $9 drinks", rankLabel:null, lat:37.7615, lng:-122.4210 },
+  ],
+  "Seattle": [
+    { id:340, name:"Needle & Thread", area:"Capitol Hill", tags:["Craft","Pacific NW"],   checkins:234, trending:"Ranked",topDrink:"Pacific NW Sour",   heat:4, happyHour:null,
+      rankLabel:"#40 · 2024", lat:47.6237, lng:-122.3148 },
+    { id:341, name:"Navy Strength",   area:"Belltown",     tags:["Tiki","Rum"],            checkins:198, trending:"Hot",   topDrink:"Royal Navy Grog",   heat:4, happyHour:"Mon–Fri 5–7pm · $10 cocktails", rankLabel:null, lat:47.6145, lng:-122.3509 },
+    { id:342, name:"Canon",           area:"Capitol Hill", tags:["Whisky","10,000 bottles"],checkins:176, trending:"Steady",topDrink:"Rare Whisky flight",heat:3, happyHour:null, rankLabel:null, lat:47.6230, lng:-122.3220 },
+  ],
+  "Las Vegas": [
+    { id:350, name:"Herbs & Rye",      area:"Off-Strip", tags:["Classics","Value"],     checkins:312, trending:"Ranked",topDrink:"Classic Sour",        heat:5, happyHour:"Mon–Fri 5–7pm · $8 cocktails",
+      rankLabel:"#25 · 2024", lat:36.1631, lng:-115.1640 },
+    { id:351, name:"The Laundry Room", area:"Downtown",  tags:["Speakeasy","No sign"],  checkins:243, trending:"Hot",   topDrink:"Bartender's choice", heat:4, happyHour:null, rankLabel:null, lat:36.1699, lng:-115.1398 },
+  ],
+  "Portland": [
+    { id:360, name:"Pepe Le Moko",  area:"Downtown",    tags:["Basement","Classic"], checkins:187, trending:"Hot",   topDrink:"Grasshopper",       heat:4, happyHour:"Daily 5–7pm · $9 cocktails", rankLabel:null, lat:45.5212, lng:-122.6780 },
+    { id:361, name:"Scotch Lodge",  area:"E. Burnside", tags:["Whisky","Cozy"],      checkins:154, trending:"Steady",topDrink:"Scotch Flight",     heat:3, happyHour:"Mon–Fri 4–6pm · $10 drinks", rankLabel:null, lat:45.5229, lng:-122.6509 },
+  ],
+  "Denver": [
+    { id:370, name:"Williams & Graham", area:"LoHi",       tags:["Speakeasy","Classics"],   checkins:243, trending:"Ranked",topDrink:"Prohibition Punch",  heat:4, happyHour:null,
+      rankLabel:"#42 · 2024", lat:39.7621, lng:-104.9839 },
+    { id:371, name:"Death & Co Denver", area:"RiNo",        tags:["Creative","Cocktails"],  checkins:198, trending:"Rising",topDrink:"Rotating menu",       heat:4, happyHour:null, rankLabel:null, lat:39.7665, lng:-104.9733 },
+    { id:372, name:"Curio",             area:"Capitol Hill", tags:["Creative","Seasonal"],  checkins:165, trending:"Hot",  topDrink:"Rocky Mountain Sour",  heat:3, happyHour:"Mon–Fri 5–7pm · $9 cocktails", rankLabel:null, lat:39.7358, lng:-104.9829 },
+  ],
+
+  /* ── USA — Southeast ── */
+  "Atlanta": [
+    { id:380, name:"Kimball House",      area:"Decatur",      tags:["Oyster Bar","Classics"],   checkins:243, trending:"Hot",    topDrink:"Absinthe Drip",        heat:5, happyHour:null,                             rankLabel:null, lat:33.7748, lng:-84.2963 },
+    { id:381, name:"Talat Market",       area:"Summerhill",   tags:["Thai","Creative"],         checkins:198, trending:"Rising", topDrink:"Thai Basil Sour",      heat:4, happyHour:null,                             rankLabel:null, lat:33.7290, lng:-84.3733 },
+    { id:382, name:"Ticonderoga Club",   area:"Krog St Mkt",  tags:["Neighbourhood","Classics"],checkins:176, trending:"Steady", topDrink:"House Old Fashioned",  heat:4, happyHour:"Tue–Fri 5–7pm · $9 cocktails", rankLabel:null, lat:33.7490, lng:-84.3578 },
+    { id:383, name:"Side Quest",         area:"Edgewood",     tags:["Vietnamese","Creative"],   checkins:154, trending:"Hot",    topDrink:"Fermented Melon Sour", heat:4, happyHour:"Daily 5–8pm · $10 drinks",     rankLabel:null, lat:33.7512, lng:-84.3598 },
+    { id:384, name:"Madeira Park",       area:"Poncey-Highland",tags:["Wine Bar","Michelin"],   checkins:132, trending:"New",    topDrink:"Rum Negroni",          heat:3, happyHour:null,                             rankLabel:"Michelin Guide South 2025", lat:33.7712, lng:-84.3598 },
+  ],
+  "Houston": [
+    { id:390, name:"Tongue-Cut Sparrow", area:"Montrose",     tags:["Japanese","Cocktails"],   checkins:234, trending:"Hot",    topDrink:"Japanese Highball",    heat:5, happyHour:null,                              rankLabel:null, lat:29.7479, lng:-95.3967 },
+    { id:391, name:"Eight Row Flint",    area:"Heights",      tags:["Whisky","Texas"],         checkins:198, trending:"Steady", topDrink:"Texas Rye Sour",       heat:4, happyHour:"Daily 3–7pm · $8 cocktails",    rankLabel:null, lat:29.7979, lng:-95.3967 },
+    { id:392, name:"Julep",              area:"Montrose",     tags:["Southern","Creative"],    checkins:176, trending:"Hot",    topDrink:"Julep Punch",          heat:4, happyHour:"Mon–Fri 4–6pm · $9 drinks",     rankLabel:null, lat:29.7412, lng:-95.3896 },
+    { id:393, name:"Pisco & Lazo",       area:"Midtown",      tags:["Peruvian","Pisco"],       checkins:143, trending:"Rising", topDrink:"Pisco Sour",           heat:3, happyHour:"Tue–Sat 5–7pm",                  rankLabel:null, lat:29.7404, lng:-95.3698 },
+  ],
+  "Dallas": [
+    { id:400, name:"Apothecary",         area:"Lower Greenville",tags:["Creative","Michelin"], checkins:256, trending:"Hot",    topDrink:"Rotating seasonal",    heat:5, happyHour:null,                              rankLabel:"James Beard Semifinalist 2024 · Michelin Exceptional Cocktails 2024", lat:32.8338, lng:-96.7746 },
+    { id:401, name:"Black Swan Saloon",  area:"East Dallas",  tags:["Classics","Speakeasy"],   checkins:198, trending:"Rising", topDrink:"House Freezer Martini",heat:4, happyHour:"Daily 5–7pm · $9 drinks",        rankLabel:null, lat:32.7853, lng:-96.7336 },
+    { id:402, name:"Midnight Rambler",   area:"Downtown",     tags:["Hotel","Upscale"],        checkins:176, trending:"Steady", topDrink:"Smoked Manhattan",     heat:4, happyHour:null,                              rankLabel:null, lat:32.7767, lng:-96.7970 },
+    { id:403, name:"Ayahuasca Cantina",  area:"Oak Cliff",    tags:["Mezcal","Agave"],         checkins:143, trending:"Steady", topDrink:"Taloc Negroni",        heat:3, happyHour:"Wed–Sat 5–8pm",                   rankLabel:null, lat:32.7423, lng:-96.8312 },
+  ],
+  "Miami": [
+    { id:260, name:"Café La Trova",      area:"Little Havana", tags:["Cuban","Heritage"],     checkins:312, trending:"Ranked", topDrink:"Mojito Royale",        heat:5, happyHour:"Mon–Fri 4–7pm · $10 cocktails",  rankLabel:"#82 (2025) · NA #13 (2024)", lat:25.7661, lng:-80.2346 },
+    { id:261, name:"The Broken Shaker",  area:"Mid Beach",    tags:["Poolside","Creative"],   checkins:267, trending:"Hot",    topDrink:"Cucumber Gimlet",      heat:4, happyHour:"Daily 5–7pm · $12 cocktails",    rankLabel:null, lat:25.8084, lng:-80.1296 },
+    { id:404, name:"Sweet Liberty",      area:"Mid Beach",    tags:["Neighbourhood","Fun"],   checkins:223, trending:"Steady", topDrink:"Rum Punch",            heat:4, happyHour:"Daily 4–7pm · $9 drinks",         rankLabel:null, lat:25.8042, lng:-80.1296 },
+    { id:405, name:"Bar Leña",           area:"Wynwood",      tags:["Spanish","Cocktails"],   checkins:187, trending:"New",    topDrink:"Sherry Cobbler",       heat:3, happyHour:"Wed–Sat 6–8pm · $11 drinks",      rankLabel:null, lat:25.8004, lng:-80.1992 },
+  ],
+  "Tampa": [
+    { id:410, name:"Anise Global Gastropub", area:"Downtown", tags:["Creative","Global"],     checkins:176, trending:"Hot",    topDrink:"Seasonal Menu",        heat:4, happyHour:"Mon–Fri 4–6pm · $8 cocktails",   rankLabel:null, lat:27.9506, lng:-82.4572 },
+    { id:411, name:"The Bartanica",      area:"Ybor City",    tags:["Botanical","Garden"],    checkins:143, trending:"Rising", topDrink:"Garden Gimlet",        heat:3, happyHour:"Tue–Sun 5–7pm · $9 drinks",       rankLabel:null, lat:27.9604, lng:-82.4390 },
+  ],
+  "Charlotte": [
+    { id:420, name:"Dot Dot Dot",        area:"Park Road",    tags:["Speakeasy","Classics"],  checkins:187, trending:"Hot",    topDrink:"Old Fashioned",        heat:4, happyHour:"Wed–Sat 5–8pm",                   rankLabel:null, lat:35.1966, lng:-80.8697 },
+    { id:421, name:"Soul Gastrolounge",  area:"Plaza Midwood",tags:["Creative","Cocktails"],  checkins:154, trending:"Steady", topDrink:"Cucumber Mule",        heat:3, happyHour:"Mon–Fri 5–7pm · $9 drinks",       rankLabel:null, lat:35.2124, lng:-80.8121 },
+    { id:422, name:"Haberdish",          area:"NoDa",         tags:["Southern","Craft beer"], checkins:132, trending:"Steady", topDrink:"Southern Mule",        heat:3, happyHour:"Daily 4–6pm · $8 drinks",         rankLabel:null, lat:35.2394, lng:-80.8016 },
+  ],
+  "Phoenix": [
+    { id:430, name:"Highball",           area:"Downtown",     tags:["Tales of Cocktail","Best Bar"],checkins:234, trending:"Hot", topDrink:"Desert Sour",       heat:5, happyHour:"Mon–Fri 5–7pm · $10 cocktails",  rankLabel:"Tales of Cocktail Top 10 West 2025", lat:33.4484, lng:-112.0740 },
+    { id:431, name:"Chilte",             area:"Egyptian Motor Hotel",tags:["Mexican","Creative"],checkins:187,trending:"Rising", topDrink:"Mezcal Paloma",      heat:4, happyHour:"Daily 5–8pm",                    rankLabel:"Tales of Cocktail Top 10 West 2025", lat:33.4701, lng:-112.0715 },
+    { id:432, name:"Pretty Penny",       area:"Midtown",      tags:["Neighbourhood","Fun"],   checkins:154, trending:"Steady", topDrink:"House Spritz",         heat:3, happyHour:"Mon–Fri 4–7pm · $9 drinks",       rankLabel:"Tales of Cocktail Top 10 West 2025", lat:33.4698, lng:-112.0743 },
+  ],
+  "San Diego": [
+    { id:440, name:"False Idol",         area:"Little Italy",  tags:["Tiki","Rum"],           checkins:221, trending:"Hot",    topDrink:"Zombie",               heat:4, happyHour:null,                               rankLabel:null, lat:32.7253, lng:-117.1694 },
+    { id:441, name:"The Grass Skirt",    area:"Pacific Beach", tags:["Tiki","Hidden"],        checkins:187, trending:"Steady", topDrink:"Mai Tai",               heat:4, happyHour:"Mon–Fri 5–7pm",                  rankLabel:null, lat:32.8006, lng:-117.2362 },
+    { id:442, name:"Noble Experiment",   area:"Gaslamp",       tags:["Speakeasy","Classics"], checkins:165, trending:"Steady", topDrink:"Negroni",               heat:3, happyHour:null,                              rankLabel:null, lat:32.7118, lng:-117.1594 },
+  ],
+  "Salt Lake City": [
+    { id:450, name:"Bar X",              area:"Downtown",      tags:["Creative","Cocktails"],  checkins:154, trending:"Hot",   topDrink:"House Sour",            heat:3, happyHour:"Mon–Fri 5–7pm · $8 cocktails",  rankLabel:null, lat:40.7609, lng:-111.8910 },
+    { id:451, name:"Whiskey Street",     area:"Downtown",      tags:["Whisky","Neighbourhood"],checkins:132, trending:"Steady",topDrink:"Rye Old Fashioned",    heat:3, happyHour:"Daily 4–6pm · $9 drinks",         rankLabel:null, lat:40.7612, lng:-111.8913 },
+  ],
+  "Scottsdale": [
+    { id:460, name:"Kazimierz World Wine Bar", area:"Old Town", tags:["Wine Bar","Cocktails"],checkins:154, trending:"Steady", topDrink:"Seasonal Spritz",      heat:3, happyHour:"Daily 4–7pm · $9 drinks",         rankLabel:null, lat:33.4942, lng:-111.9261 },
+    { id:461, name:"The Porch",          area:"Old Town",      tags:["Rooftop","Fun"],         checkins:132, trending:"Rising",topDrink:"Cucumber Margarita",   heat:3, happyHour:"Daily 3–6pm",                    rankLabel:null, lat:33.4954, lng:-111.9226 },
+  ],
+  "New Orleans": [
+    { id:250, name:"Jewel of the South", area:"French Quarter", tags:["Heritage","Classic"],  checkins:376, trending:"Ranked",topDrink:"Ramos Gin Fizz",        heat:5, happyHour:null,                               rankLabel:"#44 (2025) · #34 (2024) · NA #6 (2024)", lat:29.9589, lng:-90.0634 },
+    { id:251, name:"Cure",               area:"Freret St",      tags:["Neighbourhood","Gin"], checkins:243, trending:"Ranked",topDrink:"Pimm's Cup",            heat:4, happyHour:"Tue–Fri 5–7pm · $8 cocktails",   rankLabel:"NA #47 (2024)", lat:29.9397, lng:-90.1078 },
+    { id:252, name:"Bar Marilou",        area:"Marigny",        tags:["Hotel","Elegant"],     checkins:198, trending:"Hot",   topDrink:"Champagne Cocktail",    heat:4, happyHour:"Daily 5–7pm · $12 cocktails",    rankLabel:null, lat:29.9621, lng:-90.0572 },
+  ],
+  "Pittsburgh": [
+    { id:470, name:"Acacia",             area:"Shadyside",      tags:["Creative","Craft"],     checkins:154, trending:"Hot",   topDrink:"Garden Sour",          heat:4, happyHour:"Tue–Fri 5–7pm · $9 cocktails",   rankLabel:null, lat:40.4527, lng:-79.9283 },
+    { id:471, name:"Butterjoint",        area:"Oakland",        tags:["Classics","Cozy"],      checkins:132, trending:"Steady",topDrink:"Negroni",              heat:3, happyHour:"Daily 5–7pm · $8 drinks",         rankLabel:null, lat:40.4403, lng:-79.9500 },
+  ],
+  "Raleigh": [
+    { id:480, name:"Brewery Bhavana",    area:"Downtown",       tags:["Chinese","Craft Beer"], checkins:198, trending:"Hot",   topDrink:"Dim Sum Sour",         heat:4, happyHour:null,                               rankLabel:"James Beard Winner 2018", lat:35.7796, lng:-78.6382 },
+    { id:481, name:"Death & Taxes",      area:"Downtown",       tags:["Wood-fired","Cocktails"],checkins:165,trending:"Steady",topDrink:"Smoked Bourbon",       heat:3, happyHour:"Mon–Fri 5–7pm · $9 drinks",       rankLabel:null, lat:35.7759, lng:-78.6403 },
+  ],
+  "Baltimore": [
+    { id:490, name:"Bookmakers Cocktail Club", area:"Mt Vernon", tags:["Creative","Intimate"], checkins:154, trending:"Hot",  topDrink:"House Punch",          heat:4, happyHour:"Tue–Fri 5–7pm · $9 cocktails",   rankLabel:null, lat:39.2981, lng:-76.6173 },
+    { id:491, name:"WC Harlan",          area:"Station North",  tags:["No menu","Speakeasy"],  checkins:132, trending:"Steady",topDrink:"Bartender's choice",  heat:3, happyHour:null,                               rankLabel:null, lat:39.3101, lng:-76.6198 },
+  ],
+  "Columbus": [
+    { id:500, name:"Watershed Kitchen & Bar", area:"Short North",tags:["Farm-to-table","Local"],checkins:154,trending:"Hot",  topDrink:"Ohio Mule",            heat:3, happyHour:"Mon–Fri 4–6pm · $8 cocktails",   rankLabel:null, lat:39.9706, lng:-83.0042 },
+    { id:501, name:"Curio",              area:"German Village",  tags:["Wine Bar","Creative"],  checkins:132, trending:"Steady",topDrink:"Seasonal Spritz",     heat:3, happyHour:"Wed–Sat 5–7pm",                   rankLabel:null, lat:39.9440, lng:-82.9986 },
+  ],
+  "Indianapolis": [
+    { id:510, name:"Libertine Liquor Bar",area:"Fountain Square",tags:["Craft","Neighbourhood"],checkins:154,trending:"Hot",  topDrink:"House Cocktail",       heat:3, happyHour:"Mon–Fri 5–7pm · $8 cocktails",   rankLabel:null, lat:39.7580, lng:-86.1507 },
+    { id:511, name:"Union 50",           area:"Downtown",        tags:["Classics","Hotel"],    checkins:132, trending:"Steady",topDrink:"Classic Martini",      heat:3, happyHour:"Daily 4–6pm",                    rankLabel:null, lat:39.7670, lng:-86.1580 },
+  ],
+  "Cincinnati": [
+    { id:520, name:"Sotto",              area:"Downtown",        tags:["Italian","Creative"],  checkins:165, trending:"Hot",   topDrink:"Amaro Sour",           heat:4, happyHour:"Mon–Fri 5–7pm · $9 cocktails",  rankLabel:null, lat:39.1004, lng:-84.5116 },
+    { id:521, name:"Boca",               area:"Downtown",        tags:["Creative","Upscale"],  checkins:132, trending:"Steady",topDrink:"Seasonal Cocktail",    heat:3, happyHour:null,                             rankLabel:null, lat:39.1015, lng:-84.5123 },
+  ],
+  "Kansas City": [
+    { id:530, name:"Manifesto",          area:"Crossroads",      tags:["Speakeasy","Classics"],checkins:187, trending:"Hot",   topDrink:"KC Old Fashioned",     heat:4, happyHour:null,                             rankLabel:null, lat:39.0997, lng:-94.5786 },
+    { id:531, name:"Drastic Measures",   area:"Crossroads",      tags:["Creative","Fun"],      checkins:154, trending:"Rising",topDrink:"House Punch",          heat:3, happyHour:"Mon–Fri 5–7pm · $9 drinks",     rankLabel:null, lat:39.0973, lng:-94.5772 },
+  ],
+  "St. Louis": [
+    { id:540, name:"Retreat Gastropub",  area:"The Grove",       tags:["Craft","Neighbourhood"],checkins:154,trending:"Hot",  topDrink:"Missouri Mule",        heat:3, happyHour:"Mon–Fri 4–6pm · $8 cocktails",  rankLabel:null, lat:38.6270, lng:-90.2490 },
+    { id:541, name:"The Atomic Cowboy",  area:"The Grove",       tags:["Dive","Fun"],           checkins:132,trending:"Steady",topDrink:"House Margarita",      heat:3, happyHour:"Daily 4–7pm · $7 drinks",       rankLabel:null, lat:38.6279, lng:-90.2498 },
+  ],
+  "Louisville": [
+    { id:550, name:"Meta",               area:"NuLu",            tags:["Craft","Creative"],    checkins:187, trending:"Hot",   topDrink:"Bourbon Sour",         heat:4, happyHour:"Tue–Fri 5–7pm · $9 cocktails", rankLabel:null, lat:38.2542, lng:-85.7394 },
+    { id:551, name:"Silver Dollar",      area:"Butchertown",     tags:["Bourbon","Southern"],  checkins:165, trending:"Steady",topDrink:"Mint Julep",           heat:3, happyHour:"Mon–Fri 4–6pm · $8 drinks",    rankLabel:null, lat:38.2634, lng:-85.7321 },
+  ],
+
+  /* ── Mexico ── */
+  "Mexico City": [
+    { id:400, name:"Handshake Speakeasy",  area:"Juárez",   tags:["Innovative","Speakeasy"], checkins:521, trending:"Ranked",topDrink:"Mexi-Thai",          heat:5, happyHour:null,
+      rankLabel:"#2 · 2025  ·  #1 · 2024  ·  #3 · 2023  ·  Best Bar in N.America 2024–25", lat:19.4272, lng:-99.1591 },
+    { id:401, name:"Licorería Limantour", area:"Roma Norte", tags:["Agave","Iconic"],        checkins:432, trending:"Ranked",topDrink:"Mezcal Negroni",     heat:5, happyHour:"Mon–Fri 5–7pm · 2x1",
+      rankLabel:"#52 · 2025  ·  #7 · 2023  ·  #10 · 2022", lat:19.4189, lng:-99.1617 },
+    { id:402, name:"Tlecān",             area:"Polanco",    tags:["Indigenous","Agave"],     checkins:387, trending:"Ranked",topDrink:"Corn Husk Mezcal",   heat:5, happyHour:null,
+      rankLabel:"#23 · 2025  ·  #20 · 2024", lat:19.4284, lng:-99.1966 },
+    { id:403, name:"Bar Mauro",          area:"Condesa",    tags:["New","Creative"],         checkins:298, trending:"Hot",   topDrink:"Seasonal menu",       heat:4, happyHour:null,
+      rankLabel:"#54 · 2025  ·  One to Watch 2025", lat:19.4189, lng:-99.1590 },
+    { id:404, name:"Baltra Bar",         area:"Roma Norte", tags:["Community","Cocktails"],  checkins:276, trending:"Ranked",topDrink:"Seasonal agave",     heat:4, happyHour:"Tue–Sat 6–8pm · 2x1",
+      rankLabel:"#78 · 2025  ·  #83 · 2024", lat:19.4189, lng:-99.1590 },
+  ],
+
+  /* ── International ── */
+  "London": [
+    { id:500, name:"Tayēr + Elementary", area:"Shoreditch",   tags:["Creative","World Top 5"], checkins:412, trending:"Ranked",topDrink:"Seasonal Tasting Set",heat:5, happyHour:null,
+      rankLabel:"#5 · 2025  ·  #4 · 2024  ·  #8 · 2023  ·  Best Bar Europe 2022", lat:51.5265, lng:-0.0874 },
+    { id:501, name:"Connaught Bar",      area:"Mayfair",      tags:["Luxury","Martini"],       checkins:387, trending:"Ranked",topDrink:"Connaught Martini",   heat:5, happyHour:null,
+      rankLabel:"#6 · 2025  ·  #13 · 2024  ·  #5 · 2023  ·  World Best Bar 2021", lat:51.5118, lng:-0.1482 },
+    { id:502, name:"Satan's Whiskers",  area:"Bethnal Green", tags:["Classic","Neighbourhood"],checkins:298, trending:"Ranked",topDrink:"Satan's Whiskers",  heat:4, happyHour:"Daily 5–7pm · £7 cocktails",
+      rankLabel:"#21 · 2025", lat:51.5288, lng:-0.0576 },
+    { id:503, name:"Scarfes Bar",        area:"Holborn",      tags:["Hotel","Intimate"],       checkins:245, trending:"Ranked",topDrink:"Scarfes Martini",     heat:4, happyHour:null,
+      rankLabel:"#31 · 2025", lat:51.5160, lng:-0.1165 },
+    { id:504, name:"Three Sheets Soho",  area:"Soho",         tags:["New","Cocktails"],        checkins:198, trending:"Hot",   topDrink:"Rotating seasonal",   heat:4, happyHour:"Mon–Fri 5–7pm · £8 cocktails",
+      rankLabel:"#80 · 2025", lat:51.5138, lng:-0.1326 },
+  ],
+  "Paris": [
+    { id:510, name:"The Cambridge Public House", area:"11th arr.", tags:["Natural wine","Cocktails"],checkins:356, trending:"Ranked",topDrink:"Seasonal menu",     heat:5, happyHour:null,
+      rankLabel:"#20 · 2025  ·  #19 · 2024  ·  Highest Climber 2024", lat:48.8603, lng:2.3832 },
+    { id:511, name:"Bar Nouveau",               area:"10th arr.", tags:["New","French spirits"],   checkins:287, trending:"Hot",   topDrink:"Gin Fizz",          heat:4, happyHour:"Daily 6–8pm · €8 cocktails",
+      rankLabel:"#17 · 2025  ·  Best New Opening 2024 (Europe)", lat:48.8719, lng:2.3502 },
+    { id:512, name:"Danico",                    area:"2nd arr.",  tags:["Italian","Classic"],      checkins:245, trending:"Ranked",topDrink:"Negroni Bianco",    heat:4, happyHour:null,
+      rankLabel:"#30 · 2025  ·  #49 · 2024  ·  #51 · 2023", lat:48.8650, lng:2.3481 },
+    { id:513, name:"Little Red Door",           area:"Marais",    tags:["Creative","Seasonal"],    checkins:223, trending:"Steady",topDrink:"Seasonal concept menu",heat:3, happyHour:null, rankLabel:null, lat:48.8603, lng:2.3574 },
+  ],
+};
+
+
+
+/* ─── Mock friends activity ─── */
+const FRIENDS_VISITED = {
+  // barId → array of friend names who visited
+  200: ["Alex C.", "Remi V."],
+  201: ["Kate P."],
+  202: ["Alex C.", "M. Okafor", "Kate P."],
+  204: ["Remi V."],
+  207: ["Alex C."],
+  1:   ["Remi V.", "Kate P."],
+  7:   ["Alex C."],
+  3:   ["M. Okafor"],
+};
+
+const FILTER_OPTS = ["Top Rated","For You"];
+
+function TrendingTab({onBarTap, userCity="Toronto", userTastes=[], bars=[], setBars=()=>{}}) {
+  const [city, setCity]       = useState(userCity);
+  const [filter, setFilter]   = useState("Top Rated");
+  const [showMap, setShowMap] = useState(true);
+  const [saveToast, setSaveToast] = useState(null);
+  const [citySearch, setCitySearch] = useState("");
+  const [showCityPicker, setShowCityPicker] = useState(false);
+
+  const CITY_GROUPS = [
+    { region:"🇨🇦 Canada",        cities:["Toronto","Montreal","Vancouver","Calgary","Ottawa"] },
+    { region:"🗽 Northeast USA",   cities:["New York","Boston","Washington DC","Philadelphia","Pittsburgh","Baltimore"] },
+    { region:"🌴 Southeast USA",   cities:["Miami","Atlanta","Tampa","Charlotte","Raleigh","Nashville","New Orleans"] },
+    { region:"🤠 Texas & SW",      cities:["Austin","Dallas","Houston","San Antonio","Phoenix","Scottsdale"] },
+    { region:"🌾 Midwest USA",     cities:["Chicago","Minneapolis","Detroit","Columbus","Indianapolis","Cincinnati","Kansas City","St. Louis","Louisville"] },
+    { region:"🌊 West USA",        cities:["Los Angeles","San Francisco","Seattle","Las Vegas","Portland","Denver","San Diego","Salt Lake City"] },
+    { region:"🌮 Mexico",          cities:["Mexico City"] },
+    { region:"🌍 International",   cities:["London","Paris"] },
+  ];
+  const CITIES = CITY_GROUPS.flatMap(g=>g.cities);
+  // Merge CITY_DATA with live bars state so saved/visited reflects user actions
+  const cityBars = (CITY_DATA[city] || []).map(cb => {
+    const liveBar = bars.find(b=>b.id===cb.id);
+    return liveBar ? {...cb, saved:liveBar.saved, visited:liveBar.visited} : cb;
+  });
+
+  // ── Dynamic taste profile: derive from liked orders + saved bars ──
+  const allOrders = Object.values(MY_ORDERS).flat();
+  const likedOrders = allOrders.filter(o=>o.liked===true);
+  const savedBarObjs = ALL_BARS.filter(b=>b.saved);
+
+  // Extract taste signals: check liked drink names + saved bar tags
+  const tasteSignals = {
+    smoky:   [...likedOrders, ...savedBarObjs].some(x=>{
+               const str = (x.name||""+" "+(x.tags||[]).join(" ")).toLowerCase();
+               return str.includes("smok")||str.includes("mezcal")||str.includes("negroni")||str.includes("old fashioned");
+             }),
+    bitter:  likedOrders.some(o=>(o.note||"").toLowerCase().includes("bitter")||(o.name||"").toLowerCase().includes("negroni")||o.rating>=4&&(o.name||"").toLowerCase().includes("campari")),
+    fresh:   likedOrders.some(o=>(o.name||"").toLowerCase().includes("gimlet")||(o.name||"").toLowerCase().includes("sour")||(o.note||"").toLowerCase().includes("fresh")||(o.note||"").toLowerCase().includes("citrus")),
+    floral:  likedOrders.some(o=>(o.name||"").toLowerCase().includes("elderflower")||(o.name||"").toLowerCase().includes("lavender")||(o.name||"").toLowerCase().includes("spritz")),
+    sweet:   likedOrders.some(o=>(o.name||"").toLowerCase().includes("colada")||(o.name||"").toLowerCase().includes("daiquiri")||(o.name||"").toLowerCase().includes("margarita")),
+    classic: likedOrders.some(o=>(o.name||"").toLowerCase().includes("old fashioned")||(o.name||"").toLowerCase().includes("martini")||(o.name||"").toLowerCase().includes("manhattan")),
+  };
+
+  // If user has enough data, override onboarding tastes with real signals
+  const derivedTastes = likedOrders.length >= 2
+    ? Object.entries(tasteSignals).filter(([,v])=>v).map(([k])=>k)
+    : userTastes;
+
+  const effectiveTastes = derivedTastes.length > 0 ? derivedTastes : userTastes;
+
+  // Score each bar for "For You" by how well its tags match effective tastes
+  const scoreBar = (bar) => {
+    const tags = (bar.tags||[]).join(" ").toLowerCase();
+    const drink = (bar.topDrink||"").toLowerCase();
+    let score = 0;
+    if(effectiveTastes.includes("smoky")  && (tags.includes("mezcal")||tags.includes("smok")||drink.includes("smok"))) score+=3;
+    if(effectiveTastes.includes("bitter") && (tags.includes("classic")||tags.includes("speakeasy")||drink.includes("negroni"))) score+=3;
+    if(effectiveTastes.includes("fresh")  && (tags.includes("gin")||tags.includes("natural wine")||tags.includes("botanical"))) score+=3;
+    if(effectiveTastes.includes("floral") && (tags.includes("wine bar")||tags.includes("aperitivo")||tags.includes("floral"))) score+=3;
+    if(effectiveTastes.includes("sweet")  && (tags.includes("tiki")||tags.includes("rum")||tags.includes("tropical"))) score+=3;
+    if(effectiveTastes.includes("classic")&& (tags.includes("classic")||tags.includes("whisky")||tags.includes("heritage"))) score+=3;
+    score += (bar.checkins||0) / 100; // tiebreak by popularity
+    return score;
+  };
+
+  const forYouBars = [...cityBars].sort((a,b)=>scoreBar(b)-scoreBar(a));
+
+  const filtered = filter==="For You"
+    ? forYouBars  // scored by taste match; also surfaces trending + happy hour
+    : cityBars.filter(b=>b.rankLabel).sort((a,b)=>scoreBar(b)-scoreBar(a)); // Top Rated
+
+  const searchedCities = CITIES.filter(c=>c.toLowerCase().includes(citySearch.toLowerCase()));
+
+  const HeatDots = ({n}) => (
+    <span style={{display:"flex",gap:3}}>
+      {[1,2,3,4,5].map(i=><span key={i} style={{width:6,height:6,borderRadius:"50%",background:i<=n?C.amber:C.border}}/>)}
+    </span>
+  );
+
+  return (
+    <div style={{paddingBottom:88}}>
+      {/* Sticky header */}
+      <div style={{position:"sticky",top:0,zIndex:40,background:`${C.bg}F8`,backdropFilter:"blur(14px)",borderBottom:`1px solid ${C.border}`}}>
+
+        {/* City picker row */}
+        <div style={{padding:"14px 18px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          {/* City button — tappable to change */}
+          <button onClick={()=>setShowCityPicker(p=>!p)}
+            style={{display:"flex",alignItems:"center",gap:6,background:"none",border:`1.5px solid ${showCityPicker?C.amber:C.border}`,borderRadius:10,padding:"7px 12px",cursor:"pointer",fontFamily:"inherit"}}>
+            <span style={{fontSize:11,color:C.muted,letterSpacing:".1em",textTransform:"uppercase"}}>📍</span>
+            <span style={{fontSize:17,fontWeight:700,color:C.dark}}>{city}</span>
+            <span style={{fontSize:12,color:C.amber}}>▾</span>
+          </button>
+
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setShowMap(s=>!s)} style={{background:showMap?C.cream:"none",border:`1.5px solid ${showMap?C.amber:C.border}`,borderRadius:8,padding:"6px 10px",color:showMap?C.amberD:C.muted,fontSize:11,fontFamily:"inherit",cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              {I.map} Map
+            </button>
+          </div>
+        </div>
+
+        {/* City search dropdown */}
+        {showCityPicker && (
+          <div style={{padding:"0 18px 10px"}}>
+            <input
+              value={citySearch}
+              onChange={e=>setCitySearch(e.target.value)}
+              placeholder="Search city (Toronto, Paris, London…)"
+              style={{width:"100%",background:C.faint,border:`1.5px solid ${C.amber}`,borderRadius:9,padding:"9px 13px",fontSize:13,fontFamily:"inherit",color:C.dark,outline:"none",boxSizing:"border-box",marginBottom:8}}
+              autoFocus
+            />
+            <div style={{maxHeight:220,overflowY:"auto",scrollbarWidth:"none"}}>
+              {citySearch ? (
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {CITIES.filter(c=>c.toLowerCase().includes(citySearch.toLowerCase())).map(c=>(
+                    <button key={c} onClick={()=>{setCity(c);setShowCityPicker(false);setCitySearch("");setFilter("All");}}
+                      style={{padding:"5px 14px",borderRadius:20,border:`1.5px solid ${c===city?C.amber:C.border}`,background:c===city?C.cream:"transparent",color:c===city?C.amberD:C.body,fontSize:12,fontFamily:"inherit",cursor:"pointer",fontWeight:c===city?600:400}}>
+                      {c}
+                    </button>
+                  ))}
+                  {CITIES.filter(c=>c.toLowerCase().includes(citySearch.toLowerCase())).length===0 &&
+                    <div style={{fontSize:12,color:C.muted,padding:"4px 0"}}>No cities found yet.</div>}
+                </div>
+              ) : (
+                CITY_GROUPS.map(group=>(
+                  <div key={group.region} style={{marginBottom:10}}>
+                    <div style={{fontSize:10,color:C.muted,letterSpacing:".1em",textTransform:"uppercase",marginBottom:5,fontWeight:600}}>{group.region}</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                      {group.cities.map(c=>(
+                        <button key={c} onClick={()=>{setCity(c);setShowCityPicker(false);setCitySearch("");setFilter("All");}}
+                          style={{padding:"5px 13px",borderRadius:20,border:`1.5px solid ${c===city?C.amber:C.border}`,background:c===city?C.cream:"transparent",color:c===city?C.amberD:C.body,fontSize:12,fontFamily:"inherit",cursor:"pointer",fontWeight:c===city?600:400,transition:"all .15s"}}>
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Filter pills — compact, no Happy Hour as separate page */}
+        <div style={{display:"flex",gap:8,padding:"0 18px 12px",overflowX:"auto",scrollbarWidth:"none"}}>
+          {FILTER_OPTS.map(f=><Chip key={f} active={filter===f} onClick={()=>setFilter(f)}>{f}</Chip>)}
+        </div>
+      </div>
+
+      {/* Map */}
+      {showMap && filtered.filter(b=>b.lat).length>0 && (
+        <div style={{padding:"12px 14px 4px"}}>
+          <MiniMap bars={filtered.filter(b=>b.lat)} height={190}
+            onBarClick={b=>onBarTap(ALL_BARS.find(x=>x.id===b.id)||{...b,saved:false,visited:false,myRating:null,dist:"—",tags:b.tags})}/>
+        </div>
+      )}
+
+      {/* Save toast notification */}
+      {saveToast && (
+        <div style={{position:"fixed",bottom:100,left:"50%",transform:"translateX(-50%)",background:C.dark,color:"#fff",borderRadius:20,padding:"10px 20px",fontSize:13,fontWeight:500,zIndex:300,whiteSpace:"nowrap",boxShadow:"0 4px 16px rgba(0,0,0,.25)",pointerEvents:"none"}}>
+          🔖 {saveToast}
+        </div>
+      )}
+
+      {/* Section label */}
+      <div style={{padding:"10px 18px 4px",display:"flex",justifyContent:"space-between"}}>
+        <span style={{fontSize:12,color:C.muted}}>
+          {filter==="For You"
+            ? (derivedTastes.length>=2 ? "✨ Based on your orders & taste" : "✨ Based on your taste preferences")
+            : filtered.length > 0
+              ? `🏅 World & NA ranked bars in ${city} · ${filtered.length} ${filtered.length===1?"bar":"bars"}`
+              : null}
+        </span>
+      </div>
+
+      {/* Empty state when no ranked bars in this city */}
+      {filter==="Top Rated" && filtered.length===0 && (
+        <div style={{padding:"48px 28px",textAlign:"center"}}>
+          <div style={{fontSize:40,marginBottom:14}}>🍸</div>
+          <div style={{fontSize:16,fontWeight:700,color:C.dark,marginBottom:8}}>
+            No ranked bars in {city} yet
+          </div>
+          <div style={{fontSize:13,color:C.muted,lineHeight:1.75,marginBottom:24,maxWidth:280,margin:"0 auto 24px"}}>
+            {city} doesn't have bars on the World or NA 50 Best lists yet. See what we'd recommend for you instead.
+          </div>
+          <button onClick={()=>setFilter("For You")}
+            style={{background:C.amber,color:"#fff",border:"none",borderRadius:10,padding:"12px 28px",fontSize:14,fontFamily:"inherit",cursor:"pointer",fontWeight:700}}>
+            See For You →
+          </button>
+        </div>
+      )}
+
+      {/* Bar list */}
+      {filtered.map((bar,i)=>(
+        <div key={bar.id}
+          onClick={()=>onBarTap(ALL_BARS.find(x=>x.id===bar.id)||{...bar,saved:false,visited:false,myRating:null,dist:"—"})}
+          style={{borderBottom:`1px solid ${C.border}`,background:C.card,cursor:"pointer"}}>
+          <div style={{padding:"13px 18px",display:"flex",gap:12,alignItems:"flex-start"}}>
+            <div style={{width:26,flexShrink:0,paddingTop:2,textAlign:"center"}}>
+              <div style={{fontSize:16,fontWeight:800,color:i<3?C.amber:C.muted}}>{i+1}</div>
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0,flexWrap:"wrap"}}>
+                  <span style={{fontSize:15,color:C.dark,fontWeight:600}}>{bar.name}</span>
+                  {bars.find(b=>b.id===bar.id&&b.visited) && (
+                    <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:20,background:`${C.green}18`,color:C.green,letterSpacing:".04em"}}>✓ visited</span>
+                  )}
+                  {bars.find(b=>b.id===bar.id&&b.saved&&!b.visited) && (
+                    <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:20,background:`${C.amber}18`,color:C.amberD,letterSpacing:".04em"}}>🔖 saved</span>
+                  )}
+                </div>
+                {/* Save button with feedback */}
+                <button
+                  onClick={e=>{
+                    e.stopPropagation();
+                    const currentlySaved = bars.find(b=>b.id===bar.id)?.saved || false;
+                    const isNowSaved = !currentlySaved;
+                    setBars(prev=>prev.map(b=>b.id===bar.id
+                      ? {...b, saved:isNowSaved}
+                      : b.id===-bar.id  // also handle CITY_DATA bars not in ALL_BARS
+                      ? b
+                      : b
+                    ));
+                    // If bar not in ALL_BARS yet, add it
+                    if(!bars.find(b=>b.id===bar.id)){
+                      setBars(prev=>[...prev, {...bar, saved:true, visited:false}]);
+                    } else {
+                      setBars(prev=>prev.map(b=>b.id===bar.id?{...b,saved:isNowSaved}:b));
+                    }
+                    setSaveToast(isNowSaved ? "🔖 Saved to Me → Saved Bars" : "Removed from Saved");
+                    setTimeout(()=>setSaveToast(null), 2200);
+                  }}
+                  style={{background:"none",border:"none",cursor:"pointer",padding:"4px 8px",flexShrink:0}}>
+                  {I.save(bars.find(b=>b.id===bar.id)?.saved || false)}
+                </button>
+              </div>
+              <div style={{fontSize:12,color:C.muted,marginTop:2,display:"flex",alignItems:"center",gap:4}}>{I.pin} {bar.area}</div>
+              <div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
+                {bar.tags.map(t=><span key={t} style={{fontSize:10,padding:"2px 8px",borderRadius:20,background:C.faint,color:C.body}}>{t}</span>)}
+              </div>
+              <div style={{marginTop:8,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+                <div style={{display:"flex",flexDirection:"column",gap:5,flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:5}}>
+                    <span style={{fontSize:12}}>🔥</span>
+                    <div>
+                      <div style={{fontSize:9,color:C.muted,letterSpacing:".08em",textTransform:"uppercase",lineHeight:1.3}}>Popular here</div>
+                      <div style={{fontSize:13,color:C.dark,fontWeight:500}}>{bar.topDrink}</div>
+                    </div>
+                  </div>
+                  {(filter==="For You"||scoreBar(bar)>2) && getForYouDrink(bar, effectiveTastes) && (
+                    <div style={{display:"flex",alignItems:"center",gap:5}}>
+                      <span style={{fontSize:12}}>✨</span>
+                      <div>
+                        <div style={{fontSize:9,color:C.amberD,letterSpacing:".08em",textTransform:"uppercase",lineHeight:1.3}}>For you</div>
+                        <div style={{fontSize:13,color:C.amberD,fontWeight:600}}>{getForYouDrink(bar, effectiveTastes)}</div>
+                      </div>
+                    </div>
+                  )}
+                  {bar.happyHour && (
+                    <div style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:C.green,fontWeight:600,background:`${C.green}12`,padding:"3px 9px",borderRadius:20,alignSelf:"flex-start",marginTop:2}}>
+                      🍺 {bar.happyHour}
+                    </div>
+                  )}
+                  {bar.rankLabel && (
+                    <div style={{fontSize:11,color:"#8B7355",fontWeight:500,marginTop:1}}>🏅 {bar.rankLabel}</div>
+                  )}
+                  {FRIENDS_VISITED[bar.id] && (
+                    <div style={{display:"flex",alignItems:"center",gap:5,marginTop:4}}>
+                      <div style={{display:"flex"}}>
+                        {FRIENDS_VISITED[bar.id].slice(0,3).map((f,i)=>(
+                          <div key={f} style={{width:18,height:18,borderRadius:"50%",background:["#E8943A","#4A9E7A","#8B5ED4"][i%3],border:"1.5px solid #fff",marginLeft:i>0?-6:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"#fff",fontWeight:700}}>
+                            {f[0]}
+                          </div>
+                        ))}
+                      </div>
+                      <span style={{fontSize:11,color:C.muted}}>
+                        {FRIENDS_VISITED[bar.id].length===1
+                          ? `${FRIENDS_VISITED[bar.id][0]} visited`
+                          : `${FRIENDS_VISITED[bar.id][0]} + ${FRIENDS_VISITED[bar.id].length-1} friend${FRIENDS_VISITED[bar.id].length>2?"s":""} visited`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div style={{textAlign:"right",flexShrink:0,marginLeft:12}}>
+                  <HeatDots n={bar.heat}/>
+                  <div style={{fontSize:11,color:C.muted,marginTop:2}}>{bar.checkins} check-ins</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── ORDER MODAL ─── */
+function OrderModal({barName, prefill="", onClose, onSave}) {
+  const [name,setName]       = useState(prefill);
+  const [liked,setLiked]     = useState(null);
+  const [stars,setStars]     = useState(0);
+  const [note,setNote]       = useState("");
+  const [photo,setPhoto]     = useState(null);   // base64 preview
+  const [ocrMode,setOcrMode] = useState(false);
+  const [scanning,setScan]   = useState(false);
+  const [scanned,setDone]    = useState(false);
+  const fileRef              = useRef();
+
+  const inp = {width:"100%",background:C.faint,border:`1.5px solid ${C.border}`,borderRadius:9,padding:"12px 14px",color:C.dark,fontSize:14,fontFamily:"inherit",outline:"none",boxSizing:"border-box"};
+
+  // Handle real file pick → show preview
+  const handleFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setPhoto(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  // Simulate OCR after photo selected
+  const runOCR = () => {
+    if (!photo || scanning || scanned) return;
+    setScan(true);
+    setTimeout(()=>{ setScan(false); setDone(true); setName("Smoked Negroni"); }, 1800);
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:200,display:"flex",alignItems:"flex-end",maxWidth:430,left:"50%",transform:"translateX(-50%)"}}>
+      <div style={{background:C.card,borderTop:`1px solid ${C.border}`,borderRadius:"20px 20px 0 0",width:"100%",padding:"20px 20px 44px",maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{width:32,height:3,background:C.border,borderRadius:2,margin:"0 auto 20px"}}/>
+
+        {/* Header */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+          <div>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:".12em",textTransform:"uppercase",marginBottom:3}}>Ordering at</div>
+            <div style={{fontSize:20,color:C.dark,fontWeight:600}}>{barName}</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.muted,padding:4}}>{I.x}</button>
+        </div>
+
+        {/* Photo area — primary action */}
+        <div style={{marginBottom:14}}>
+          {photo ? (
+            <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:`1.5px solid ${C.border}`}}>
+              <img src={photo} alt="drink" style={{width:"100%",maxHeight:200,objectFit:"cover",display:"block"}}/>
+              <div style={{position:"absolute",top:8,right:8,display:"flex",gap:6}}>
+                <button onClick={()=>{setPhoto(null);setDone(false);}} style={{background:"rgba(0,0,0,.55)",border:"none",borderRadius:6,padding:"4px 8px",color:"#fff",fontSize:11,cursor:"pointer"}}>Remove</button>
+                {!scanned && (
+                  <button onClick={runOCR} style={{background:scanning?C.amber:"rgba(0,0,0,.55)",border:"none",borderRadius:6,padding:"4px 10px",color:"#fff",fontSize:11,cursor:"pointer",fontWeight:600}}>
+                    {scanning?"Reading…":"OCR auto-fill"}
+                  </button>
+                )}
+                {scanned && <div style={{background:`${C.green}DD`,borderRadius:6,padding:"4px 10px",fontSize:11,color:"#fff",fontWeight:600}}>✓ Name filled</div>}
+              </div>
+            </div>
+          ) : (
+            <div style={{display:"flex",gap:10}}>
+              {/* Upload photo */}
+              <button onClick={()=>fileRef.current.click()} style={{flex:1,border:`2px solid ${C.amber}`,borderRadius:14,padding:"22px 10px",background:`${C.amber}08`,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+                <div style={{fontSize:30}}>📷</div>
+                <div style={{fontSize:13,fontWeight:700,color:C.amberD}}>Add photo</div>
+                <div style={{fontSize:11,color:C.muted}}>Drink or menu</div>
+              </button>
+              {/* Snap menu for OCR */}
+              <button onClick={()=>fileRef.current.click()} style={{flex:1,border:`2px dashed ${C.border}`,borderRadius:14,padding:"22px 10px",background:C.faint,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+                <div style={{fontSize:30}}>📋</div>
+                <div style={{fontSize:13,fontWeight:700,color:C.body}}>Snap menu</div>
+                <div style={{fontSize:11,color:C.muted}}>OCR auto-fills name</div>
+              </button>
+            </div>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleFile}/>
+        </div>
+
+        {/* Form */}
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <input style={inp} placeholder="Drink name (required)" value={name} onChange={e=>setName(e.target.value)}/>
+          <div>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:".1em",textTransform:"uppercase",marginBottom:8}}>Liked it?</div>
+            <div style={{display:"flex",gap:8}}>
+              {[{v:true,l:"👍  Yes"},{v:false,l:"👎  Not really"}].map(({v,l})=>(
+                <button key={l} onClick={()=>setLiked(liked===v?null:v)} style={{flex:1,padding:"9px 0",borderRadius:9,fontSize:13,fontFamily:"inherit",cursor:"pointer",background:liked===v?(v?`${C.green}18`:`${C.red}12`):"transparent",border:`1.5px solid ${liked===v?(v?C.green:C.red):C.border}`,color:liked===v?(v?C.green:C.red):C.body,transition:"all .2s"}}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:".1em",textTransform:"uppercase",marginBottom:8}}>Rating</div>
+            <div style={{display:"flex",gap:6}}>
+              {[1,2,3,4,5].map(n=>(
+                <button key={n} onClick={()=>setStars(stars===n?0:n)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill={n<=stars?C.amber:"none"} stroke={C.amber} strokeWidth="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </button>
+              ))}
+            </div>
+          </div>
+          <textarea style={{...inp,height:72,resize:"none"}} placeholder="Tasting notes…" value={note} onChange={e=>setNote(e.target.value)}/>
+        </div>
+
+        <div style={{display:"flex",gap:10,marginTop:16}}>
+          <button onClick={onClose} style={{flex:1,background:"transparent",color:C.body,border:`1.5px solid ${C.border}`,borderRadius:9,padding:"11px 0",fontSize:14,fontFamily:"inherit",cursor:"pointer"}}>Cancel</button>
+          <button onClick={()=>{if(name){onSave({name,liked,rating:stars,note,photo});onClose();}}} disabled={!name} style={{flex:2,background:name?C.amber:"#eee",color:name?"#fff":C.muted,border:"none",borderRadius:9,padding:"11px 0",fontSize:14,fontFamily:"inherit",cursor:name?"pointer":"default",fontWeight:700,transition:"all .2s"}}>
+            Save
+          </button>
+        </div>
+      </div>
+      <style>{`@keyframes scan{from{width:0}to{width:100%}}`}</style>
+    </div>
+  );
+}
+
+/* ─── BAR DETAIL ─── */
+function BarDetail({bar, onBack}) {
+  const [orders, setOrders] = useState(bar.visited?BAR_TEMPLATE.orders:[]);
+  const [tab,setTab]         = useState("orders");
+  const [modal,setModal]     = useState(false);
+  const [prefill,setPrefill] = useState("");
+  const [saved,setSaved]     = useState(bar.saved);
+
+  return (
+    <div style={{minHeight:"100vh",paddingBottom:80,background:C.bg}}>
+      {/* Hero */}
+      <div style={{position:"relative",height:160,background:`linear-gradient(135deg,${C.amber}44 0%,#F5EDD8 60%,${C.cream} 100%)`,overflow:"hidden"}}>
+        <div style={{position:"absolute",bottom:0,left:0,right:0,height:50,background:`linear-gradient(to top,${C.bg},transparent)`}}/>
+        <button onClick={onBack} style={{position:"absolute",top:52,left:16,background:`${C.card}CC`,backdropFilter:"blur(10px)",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 12px",color:C.dark,cursor:"pointer",display:"flex",alignItems:"center",gap:4,fontSize:13,fontFamily:"inherit",fontWeight:500}}>
+          {I.back} Back
+        </button>
+        <button onClick={()=>setSaved(s=>!s)} style={{position:"absolute",top:52,right:16,background:`${C.card}CC`,backdropFilter:"blur(10px)",border:`1px solid ${C.border}`,borderRadius:10,padding:"7px 10px",cursor:"pointer"}}>
+          {I.save(saved)}
+        </button>
+        {orders.length>0 && <div style={{position:"absolute",bottom:18,right:16,background:`${C.green}18`,border:`1px solid ${C.green}44`,borderRadius:20,padding:"4px 12px",fontSize:11,color:C.green,fontWeight:500}}>✓ {orders.length} ordered</div>}
+      </div>
+
+      <div style={{padding:"2px 18px 0"}}>
+        <h1 style={{fontSize:24,fontWeight:700,margin:"0 0 3px",color:C.dark}}>{bar.name}</h1>
+        <div style={{fontSize:12,color:C.muted,display:"flex",alignItems:"center",gap:4,marginBottom:8}}>{I.pin} {bar.area}</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+          {bar.tags?.map(t=><span key={t} style={{fontSize:10,letterSpacing:".08em",textTransform:"uppercase",padding:"3px 9px",borderRadius:20,background:`${C.amber}18`,color:C.amberD,fontWeight:600}}>{t}</span>)}
+          {bar.rankLabel && <span style={{fontSize:10,padding:"3px 9px",borderRadius:20,background:`${C.amber}22`,color:C.amberD,fontWeight:600}}>🏅 {bar.rankLabel}</span>}
+        </div>
+        <p style={{fontSize:14,color:C.muted,lineHeight:1.75,margin:"0 0 8px"}}>{BAR_TEMPLATE.desc}</p>
+        <div style={{fontSize:12,color:C.muted,display:"flex",alignItems:"center",gap:4,marginBottom:3}}>{I.clock} {BAR_TEMPLATE.hours}</div>
+        <a href={`https://maps.google.com/?q=${encodeURIComponent(BAR_TEMPLATE.addr)}`} target="_blank" rel="noreferrer" style={{fontSize:12,color:C.blue,textDecoration:"none"}}>{BAR_TEMPLATE.addr} ↗ Open in Maps</a>
+      </div>
+
+      <div style={{height:1,background:C.border,margin:"14px 0"}}/>
+
+      <div style={{padding:"0 18px 14px"}}>
+        <button onClick={()=>{setPrefill("");setModal(true);}} style={{width:"100%",background:C.amber,color:"#fff",border:"none",borderRadius:10,padding:"13px 0",fontSize:15,fontFamily:"inherit",cursor:"pointer",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          {I.plus} This is what I ordered
+        </button>
+      </div>
+
+      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,margin:"0 0 0"}}>
+        {[{id:"orders",label:"My Orders"},{id:"sigs",label:"Signature Drinks"}].map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"10px 0",background:"none",border:"none",borderBottom:`2px solid ${tab===t.id?C.amber:"transparent"}`,color:tab===t.id?C.amberD:C.muted,fontSize:13,fontFamily:"inherit",cursor:"pointer",fontWeight:tab===t.id?600:400,transition:"all .2s",marginBottom:-1}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab==="orders" && (
+        <div>
+          {orders.length===0
+            ?<div style={{textAlign:"center",padding:"40px 20px",color:C.muted,fontSize:14,lineHeight:1.8}}>Nothing logged yet.<br/><span style={{color:C.amberD,fontWeight:500}}>Tap above to start.</span></div>
+            :orders.map(o=>(
+              <div key={o.id} style={{borderBottom:`1px solid ${C.border}`,background:C.card}}>
+                <div style={{display:"flex",gap:12,alignItems:"flex-start",padding:"14px 18px"}}>
+                  <div style={{width:38,height:38,borderRadius:8,background:o.liked===true?`${C.green}18`:o.liked===false?`${C.red}12`:C.faint,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>
+                    {o.liked===true?"👍":o.liked===false?"👎":"🍸"}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                      <span style={{fontSize:15,color:C.dark,fontWeight:500}}>{o.name}</span>
+                      {o.rating>0&&<StarRow n={o.rating}/>}
+                    </div>
+                    <div style={{fontSize:11,color:C.muted,marginTop:2}}>{o.date}</div>
+                    {o.note&&<p style={{fontSize:13,color:C.muted,margin:"6px 0 0",lineHeight:1.6,fontStyle:"italic"}}>"{o.note}"</p>}
+                  </div>
+                </div>
+              </div>
+            ))
+          }
+        </div>
+      )}
+
+      {tab==="sigs" && (
+        <div>
+          <div style={{padding:"12px 18px 4px",fontSize:12,color:C.muted}}>Community favourites</div>
+          {BAR_TEMPLATE.sigs.map(d=>(
+            <div key={d.name} style={{borderBottom:`1px solid ${C.border}`,background:C.card}}>
+              <div style={{display:"flex",gap:12,alignItems:"flex-start",padding:"14px 18px"}}>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                    <span style={{fontSize:15,color:C.dark,fontWeight:500}}>{d.name}</span>
+                    <span style={{fontSize:10,color:C.amberD,fontWeight:600,letterSpacing:".08em",textTransform:"uppercase",background:`${C.amber}18`,padding:"2px 8px",borderRadius:20}}>{d.base}</span>
+                  </div>
+                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>{d.desc}</div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+                    <span style={{fontSize:12,color:C.muted}}>♥ {d.likes} people love this</span>
+                    <button onClick={()=>{setPrefill(d.name);setModal(true);}} style={{background:"none",border:`1.5px solid ${C.border}`,borderRadius:7,padding:"5px 12px",color:C.amberD,fontSize:12,fontFamily:"inherit",cursor:"pointer",fontWeight:500}}>I had this</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {modal&&<OrderModal barName={bar.name} prefill={prefill} onClose={()=>setModal(false)} onSave={o=>setOrders(p=>[{id:Date.now(),date:"Today",...o},...p])}/>}
+    </div>
+  );
+}
+
+/* ─── ONBOARDING ─── */
+const TASTE_OPTIONS = [
+  {id:"bitter",  label:"Bitter & Complex", emoji:"🍊"},
+  {id:"smoky",   label:"Smoky & Bold",     emoji:"🔥"},
+  {id:"fresh",   label:"Fresh & Citrusy",  emoji:"🍋"},
+  {id:"floral",  label:"Floral & Light",   emoji:"🌸"},
+  {id:"classic", label:"Classic & Timeless",emoji:"🥃"},
+  {id:"sweet",   label:"Sweet & Fruity",   emoji:"🍓"},
+];
+
+/* ─── Personalized recommendation engine ─── */
+// Maps taste preference -> a "for you" drink suggestion + matching tag keywords
+const TASTE_PROFILES = {
+  bitter:  { drink:"Negroni Riff",        match:["Classic","Italian","Speakeasy","No menu","Cocktails"] },
+  smoky:   { drink:"Smoked Mezcal Sour",  match:["Mezcal","Smoked","Whisky","Bourbon"] },
+  fresh:   { drink:"Citrus Gimlet",       match:["Gin","Fresh","Natural Wine","Botanical"] },
+  floral:  { drink:"Elderflower Spritz",  match:["Floral","Wine Bar","Botanical","Aperitivo"] },
+  classic: { drink:"Old Fashioned",       match:["Classic","Whisky","Heritage","Hotel"] },
+  sweet:   { drink:"Tropical Daiquiri",   match:["Tiki","Rum","Tropical","Fun"] },
+};
+
+// Pick the best "for you" drink for a bar based on user's taste preferences
+function getForYouDrink(bar, userTastes) {
+  if (!userTastes || userTastes.length === 0) return null;
+  const tags = bar.tags || [];
+  // Find a taste preference whose match-keywords overlap with this bar's tags
+  for (const tasteId of userTastes) {
+    const profile = TASTE_PROFILES[tasteId];
+    if (!profile) continue;
+    if (tags.some(t => profile.match.some(m => t.toLowerCase().includes(m.toLowerCase())))) {
+      return profile.drink;
+    }
+  }
+  // Fallback: use the user's first taste preference regardless of tag match
+  const fallback = TASTE_PROFILES[userTastes[0]];
+  return fallback ? fallback.drink : null;
+}
+
+
+function Onboarding({onDone}) {
+  const [step, setStep]   = useState(0); // 0=city, 1=taste
+  const [city, setCity]   = useState("");
+  const [tastes, setTastes] = useState(new Set());
+  const [cityInput, setCityInput] = useState("");
+
+  const QUICK_CITIES = ["Toronto","New York","Los Angeles","Chicago","Montreal","Vancouver","Miami","San Francisco"];
+
+  const toggleTaste = t => setTastes(prev => {
+    const n = new Set(prev);
+    n.has(t) ? n.delete(t) : n.add(t);
+    return n;
+  });
+
+  const canNext0 = city.length > 0;
+  const canNext1 = tastes.size > 0;
+
+  return (
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",padding:"0 24px"}}>
+      {/* Progress bar */}
+      <div style={{height:3,background:C.border,margin:"0 -24px",position:"relative"}}>
+        <div style={{height:"100%",background:C.amber,width:step===0?"50%":"100%",transition:"width .4s ease",borderRadius:"0 2px 2px 0"}}/>
+      </div>
+
+      <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",paddingTop:20}}>
+        {step === 0 && (
+          <>
+            <div style={{fontSize:28,fontWeight:700,color:C.dark,marginBottom:6}}>Where are you based?</div>
+            <div style={{fontSize:15,color:C.muted,marginBottom:28}}>We'll show you bars near you first.</div>
+
+            {/* Quick picks */}
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:20}}>
+              {QUICK_CITIES.map(c=>(
+                <button key={c} onClick={()=>{setCity(c);setCityInput(c);}}
+                  style={{padding:"8px 16px",borderRadius:20,border:`1.5px solid ${city===c?C.amber:C.border}`,background:city===c?C.cream:"transparent",color:city===c?C.amberD:C.body,fontSize:13,fontFamily:"inherit",cursor:"pointer",fontWeight:city===c?600:400,transition:"all .15s"}}>
+                  {c}
+                </button>
+              ))}
+            </div>
+
+            <input
+              value={cityInput}
+              onChange={e=>{setCityInput(e.target.value);setCity(e.target.value);}}
+              placeholder="Or type any city…"
+              style={{width:"100%",background:C.faint,border:`1.5px solid ${C.border}`,borderRadius:10,padding:"12px 14px",fontSize:14,fontFamily:"inherit",color:C.dark,outline:"none",boxSizing:"border-box"}}
+            />
+          </>
+        )}
+
+        {step === 1 && (
+          <>
+            <div style={{fontSize:28,fontWeight:700,color:C.dark,marginBottom:6}}>What do you love?</div>
+            <div style={{fontSize:15,color:C.muted,marginBottom:28}}>Pick your cocktail styles. We'll personalise your feed.</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              {TASTE_OPTIONS.map(t=>{
+                const on = tastes.has(t.id);
+                return (
+                  <button key={t.id} onClick={()=>toggleTaste(t.id)}
+                    style={{padding:"16px 12px",borderRadius:14,border:`1.5px solid ${on?C.amber:C.border}`,background:on?C.cream:"transparent",cursor:"pointer",textAlign:"left",fontFamily:"inherit",transition:"all .15s"}}>
+                    <div style={{fontSize:24,marginBottom:6}}>{t.emoji}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:on?C.amberD:C.dark}}>{t.label}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* CTA */}
+      <div style={{paddingBottom:48,paddingTop:24}}>
+        {step === 0 && (
+          <button onClick={()=>setStep(1)} disabled={!canNext0}
+            style={{width:"100%",background:canNext0?C.amber:"#E8E2D5",color:canNext0?"#fff":C.muted,border:"none",borderRadius:12,padding:"15px 0",fontSize:16,fontFamily:"inherit",cursor:canNext0?"pointer":"default",fontWeight:700,transition:"all .2s"}}>
+            Next →
+          </button>
+        )}
+        {step === 1 && (
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <button onClick={()=>onDone({city,tastes:[...tastes]})} disabled={!canNext1}
+              style={{width:"100%",background:canNext1?C.amber:"#E8E2D5",color:canNext1?"#fff":C.muted,border:"none",borderRadius:12,padding:"15px 0",fontSize:16,fontFamily:"inherit",cursor:canNext1?"pointer":"default",fontWeight:700,transition:"all .2s"}}>
+              Start exploring 🍸
+            </button>
+            <button onClick={()=>onDone({city,tastes:[]})}
+              style={{background:"none",border:"none",color:C.muted,fontSize:13,fontFamily:"inherit",cursor:"pointer",padding:"4px 0"}}>
+              Skip for now
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── ME TAB (Profile + Saved combined) ─── */
+function MeTab({bars, setBars, onBarTap, onCheckin}) {
+  const [view, setView] = useState("saved"); // "saved" | "profile"
+  const toggleSave = id => setBars(prev=>prev.map(b=>b.id===id?{...b,saved:!b.saved}:b));
+  const savedBars = bars.filter(b=>b.saved);
+
+  // Profile data
+  const allOrders   = Object.values(MY_ORDERS).flat();
+  const topRated    = [...allOrders].sort((a,b)=>b.rating-a.rating).slice(0,3);
+  const visitedBars = bars.filter(b=>b.visited);
+  const avgRating   = allOrders.length
+    ? (allOrders.reduce((s,o)=>s+(o.rating||0),0)/allOrders.length).toFixed(1) : null;
+
+  const [summary, setSummary]   = useState(null);
+  const [loading, setLoading]   = useState(false);
+
+  const generateSummary = async () => {
+    setLoading(true);
+    const likedOrders = allOrders.filter(o=>o.liked===true);
+    const ctx = [
+      `Visited: ${visitedBars.map(b=>b.name).join(", ")||"none yet"}`,
+      `Saved: ${savedBars.map(b=>b.name).join(", ")||"none yet"}`,
+      `Liked: ${likedOrders.map(o=>o.name).join(", ")||"none yet"}`,
+      `Top rated: ${topRated.map(o=>`${o.name} (${o.rating}★)`).join(", ")||"none yet"}`,
+      `Notes: ${allOrders.filter(o=>o.note).map(o=>`"${o.note}"`).join("; ")||"none"}`,
+    ].join("\n");
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:250,
+          messages:[{role:"user",content:`You are a cocktail sommelier. Write 2-3 sentences describing this user's taste profile — what they love, avoid, and what makes a great bar for them. Be warm and specific.\n\n${ctx}`}]})
+      });
+      const d = await res.json();
+      setSummary(d.content?.[0]?.text||"Unable to generate.");
+    } catch { setSummary("Couldn't connect. Try again."); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{paddingBottom:88,background:C.bg}}>
+      {/* Header */}
+      <div style={{background:C.card,borderBottom:`1px solid ${C.border}`,padding:"32px 18px 0"}}>
+        <div style={{display:"flex",alignItems:"center",gap:14,paddingBottom:16}}>
+          <div style={{width:52,height:52,borderRadius:"50%",background:`${C.amber}33`,border:`2.5px solid ${C.amber}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,color:C.amberD,fontWeight:700}}>Me</div>
+          <div>
+            <div style={{fontSize:19,fontWeight:700,color:C.dark}}>My Cocktail Diary</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:2}}>{visitedBars.length} bars visited · {allOrders.length} orders · {savedBars.length} saved</div>
+          </div>
+        </div>
+        {/* Sub-tabs */}
+        <div style={{display:"flex",borderTop:`1px solid ${C.border}`}}>
+          {[{id:"saved",label:"Saved Bars"},{id:"profile",label:"My Profile"}].map(t=>(
+            <button key={t.id} onClick={()=>setView(t.id)}
+              style={{flex:1,padding:"11px 0",background:"none",border:"none",borderBottom:`2.5px solid ${view===t.id?C.amber:"transparent"}`,color:view===t.id?C.amberD:C.muted,fontSize:13,fontFamily:"inherit",cursor:"pointer",fontWeight:view===t.id?700:400,transition:"all .2s",marginBottom:-1}}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── SAVED BARS view ── */}
+      {view === "saved" && (
+        savedBars.length === 0 ? (
+          <div style={{textAlign:"center",padding:"60px 24px",color:C.muted,lineHeight:1.8}}>
+            <div style={{fontSize:36,marginBottom:12}}>🔖</div>
+            <div style={{fontSize:16,fontWeight:600,color:C.dark,marginBottom:6}}>No saved bars yet</div>
+            <div style={{fontSize:13}}>Tap the bookmark on any bar in Explore to save it here.</div>
+          </div>
+        ) : (
+          <>
+            <div style={{padding:"14px 14px 8px"}}>
+              <div style={{fontSize:12,color:C.muted,marginBottom:8,paddingLeft:4}}>{savedBars.length} saved · tap pins to view</div>
+              <MiniMap bars={savedBars.filter(b=>b.lat)} height={180} onBarClick={b=>onBarTap(b)}/>
+            </div>
+            <div style={{padding:"0 14px 12px"}}>
+              <button onClick={()=>{
+                const picks=savedBars.filter(b=>b.lat).slice(0,10);
+                if(!picks.length)return;
+                if(picks.length===1){window.open(`https://maps.google.com/?q=${encodeURIComponent(picks[0].name+", Toronto")}`,"_blank");return;}
+                const o=encodeURIComponent(picks[0].name+", Toronto");
+                const d=encodeURIComponent(picks[picks.length-1].name+", Toronto");
+                const m=picks.slice(1,-1).map(b=>b.name+", Toronto").join("|");
+                window.open(["https://www.google.com/maps/dir/?api=1",`origin=${o}`,`destination=${d}`,m?`waypoints=${encodeURIComponent(m)}`:"","travelmode=walking"].filter(Boolean).join("&"),"_blank");
+              }} style={{width:"100%",background:C.amber,color:"#fff",border:"none",borderRadius:10,padding:"12px 0",fontSize:14,fontFamily:"inherit",cursor:"pointer",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                {I.map} Plan walking route
+              </button>
+            </div>
+            <div style={{height:1,background:C.border}}/>
+            {/* Group by city */}
+            {[...new Set(savedBars.map(b=>b.city||"Toronto"))].sort((a,b)=>a==="Toronto"?-1:b==="Toronto"?1:a.localeCompare(b)).map(city=>{
+              const cityBars = savedBars.filter(b=>(b.city||"Toronto")===city);
+              return (
+                <div key={city}>
+                  <div style={{padding:"12px 18px 4px",fontSize:10,color:C.muted,fontWeight:700,letterSpacing:".12em",textTransform:"uppercase",display:"flex",alignItems:"center",gap:6}}>
+                    📍 {city} <span style={{color:C.border}}>·</span> <span style={{fontWeight:400}}>{cityBars.length} saved</span>
+                  </div>
+                  {cityBars.map(bar=><BarRow key={bar.id} bar={bar} onTap={()=>onBarTap(bar)} onSave={toggleSave}/>)}
+                </div>
+              );
+            })}
+          </>
+        )
+      )}
+
+      {/* ── PROFILE view ── */}
+      {view === "profile" && (
+        <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:14}}>
+          {/* Stats */}
+          <div style={{display:"flex",gap:8}}>
+            {[["Bars",visitedBars.length],["Orders",allOrders.length],["Saved",savedBars.length]].map(([l,v])=>(
+              <div key={l} style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 8px",textAlign:"center"}}>
+                <div style={{fontSize:22,fontWeight:700,color:C.amber}}>{v}</div>
+                <div style={{fontSize:10,color:C.muted,marginTop:2,letterSpacing:".04em"}}>{l}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* AI Summary */}
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.dark}}>✦ Taste Summary</div>
+              <button onClick={generateSummary} disabled={loading}
+                style={{background:C.amber,color:"#fff",border:"none",borderRadius:7,padding:"5px 12px",fontSize:11,fontFamily:"inherit",cursor:"pointer",fontWeight:600,opacity:loading?0.6:1}}>
+                {loading?"Thinking…":summary?"Refresh":"Generate"}
+              </button>
+            </div>
+            {summary
+              ? <p style={{fontSize:14,color:C.body,lineHeight:1.75,margin:0}}>{summary}</p>
+              : <p style={{fontSize:13,color:C.muted,lineHeight:1.7,margin:0,fontStyle:"italic"}}>
+                  {allOrders.length > 0 ? "Hit Generate to get your AI taste summary." : "Log a few orders first — then we'll build your taste profile."}
+                </p>
+            }
+          </div>
+
+          {/* Top drinks */}
+          {topRated.length > 0 && (
+            <div>
+              <div style={{fontSize:11,color:C.muted,letterSpacing:".1em",textTransform:"uppercase",marginBottom:10}}>My top-rated drinks</div>
+              {topRated.map((o,i)=>(
+                <div key={o.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{fontSize:16,fontWeight:800,color:i===0?C.amber:C.muted,width:22}}>{i+1}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,fontWeight:600,color:C.dark}}>{o.name}</div>
+                    <div style={{fontSize:11,color:C.muted,marginTop:1}}>{o.date}</div>
+                  </div>
+                  <div style={{display:"flex",gap:2}}>{[1,2,3,4,5].map(j=><span key={j}>{I.star(j<=o.rating,11)}</span>)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── QUICK CHECKIN (floating +) ─── */
+function QuickCheckin({bars, onDone, onClose, userCity="Toronto"}) {
+  const [query, setQuery]   = useState("");
+  const [picked, setPicked] = useState(null);
+
+  // Use CITY_DATA for the current city, merged with user's saved/visited state
+  const cityPool = (CITY_DATA[userCity] || TRENDING_BARS).map(cb => {
+    const userBar = bars.find(b=>b.id===cb.id);
+    return userBar ? {...cb, ...userBar} : cb;
+  });
+
+  // Recent bars first (visited in current city), then saved, then rest of city pool
+  const recentBars  = cityPool.filter(b=>b.visited).sort((a,b)=>parseFloat(a.dist||99)-parseFloat(b.dist||99));
+  const savedBars   = cityPool.filter(b=>b.saved&&!b.visited);
+  const nearbyBars  = cityPool.filter(b=>!b.visited&&!b.saved);
+  const matches     = cityPool.filter(b=>b.name.toLowerCase().includes(query.toLowerCase())||b.area.toLowerCase().includes(query.toLowerCase()));
+
+  if (picked) return <OrderModal barName={picked.name} onClose={onClose} onSave={order=>{onDone(order);onClose();}}/>;
+
+  const BarOption = ({bar, label}) => (
+    <div onClick={()=>setPicked(bar)}
+      style={{padding:"14px 14px",borderRadius:14,cursor:"pointer",display:"flex",alignItems:"center",gap:14,marginBottom:6,background:C.faint,border:`1px solid ${C.border}`,transition:"all .15s"}}
+      onMouseEnter={e=>e.currentTarget.style.background="#EDE8DF"}
+      onMouseLeave={e=>e.currentTarget.style.background=C.faint}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"nowrap"}}>
+          <span style={{fontSize:15,fontWeight:700,color:C.dark,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{bar.name}</span>
+          {label==="visited" && <span style={{fontSize:10,color:C.green,background:`${C.green}15`,padding:"2px 8px",borderRadius:20,fontWeight:700,flexShrink:0}}>✓ been here</span>}
+          {label==="saved"   && <span style={{fontSize:10,color:C.amberD,background:`${C.amber}18`,padding:"2px 8px",borderRadius:20,fontWeight:700,flexShrink:0}}>🔖</span>}
+        </div>
+        <div style={{fontSize:13,color:C.muted,marginTop:3}}>{bar.area}{bar.dist&&bar.dist!=="—"?` · ${bar.dist}`:""}</div>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.amber} strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+  );
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:200,display:"flex",alignItems:"flex-end",maxWidth:430,left:"50%",transform:"translateX(-50%)",top:0}}>
+      <div style={{background:"#FFFFFF",borderRadius:"24px 24px 0 0",width:"100%",padding:"16px 20px 40px",height:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 -8px 40px rgba(0,0,0,.22)"}}>
+        <div style={{width:40,height:4,background:"#D0C8BC",borderRadius:2,margin:"0 auto 18px"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <div>
+            <div style={{fontSize:19,fontWeight:700,color:C.dark}}>Where are you drinking?</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:2}}>📍 {userCity}</div>
+          </div>
+          <button onClick={onClose} style={{background:C.faint,border:"none",cursor:"pointer",color:C.muted,padding:"6px 8px",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}}>{I.x}</button>
+        </div>
+        <input autoFocus value={query} onChange={e=>setQuery(e.target.value)}
+          placeholder="Search bar name…"
+          style={{width:"100%",background:"#F5F1EC",border:`2px solid ${C.amber}`,borderRadius:12,padding:"13px 16px",fontSize:15,fontFamily:"inherit",color:C.dark,outline:"none",boxSizing:"border-box",marginBottom:14}}/>
+        <div style={{overflowY:"auto",flex:1,WebkitOverflowScrolling:"touch"}}>
+          {query ? (
+            <>
+              {matches.map(bar=><BarOption key={bar.id} bar={bar}/>)}
+              {matches.length===0 && (
+                <div style={{padding:"20px 0",textAlign:"center",color:C.muted,fontSize:13}}>
+                  No bars found.<br/>
+                  <button onClick={()=>setPicked({name:query,area:""})}
+                    style={{marginTop:8,background:"none",border:`1.5px solid ${C.border}`,borderRadius:8,padding:"7px 14px",color:C.amberD,fontSize:13,fontFamily:"inherit",cursor:"pointer",fontWeight:600}}>
+                    Log "{query}" anyway →
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Recent visits */}
+              {recentBars.length > 0 && (
+                <div style={{marginBottom:8}}>
+                  <div style={{fontSize:10,color:C.muted,letterSpacing:".1em",textTransform:"uppercase",padding:"4px 12px 6px"}}>Recently visited</div>
+                  {recentBars.slice(0,3).map(bar=><BarOption key={bar.id} bar={bar} label="visited"/>)}
+                </div>
+              )}
+              {/* Saved bars */}
+              {savedBars.length > 0 && (
+                <div style={{marginBottom:8}}>
+                  <div style={{fontSize:10,color:C.muted,letterSpacing:".1em",textTransform:"uppercase",padding:"4px 12px 6px"}}>Saved bars</div>
+                  {savedBars.slice(0,3).map(bar=><BarOption key={bar.id} bar={bar} label="saved"/>)}
+                </div>
+              )}
+              {/* Nearby */}
+              {nearbyBars.length > 0 && (
+                <div>
+                  <div style={{fontSize:10,color:C.muted,letterSpacing:".1em",textTransform:"uppercase",padding:"4px 12px 6px"}}>Near you</div>
+                  {nearbyBars.slice(0,4).map(bar=><BarOption key={bar.id} bar={bar}/>)}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── ROOT ─── */
+export default function App() {
+  const [onboarded, setOnboarded] = useState(false);
+  const [userCity, setUserCity]   = useState("Toronto");
+  const [userTastes, setUserTastes] = useState([]);
+  const [bars, setBars]           = useState(ALL_BARS);
+  const [tab, setTab]             = useState("explore");
+  const [detail, setDetail]       = useState(null);
+  const [showCheckin, setShowCheckin] = useState(false);
+
+  const NAV = [
+    {id:"explore", label:"Explore",  icon:I.explore},
+    {id:"home",    label:"My Trail", icon:I.trail},
+    {id:"me",      label:"Me",       icon:I.profile},
+  ];
+
+  const goBar = bar => setDetail(bars.find(b=>b.id===bar.id)||bar);
+
+  if (!onboarded) return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+        body{margin:0;background:${C.bg};}
+        ::-webkit-scrollbar{width:0;height:0;}
+        input::placeholder{color:${C.muted};}
+        input:focus{border-color:${C.amber}!important;}
+      `}</style>
+      <div style={{maxWidth:430,margin:"0 auto",fontFamily:"'Inter',system-ui,sans-serif"}}>
+        <Onboarding onDone={({city,tastes})=>{setUserCity(city);setUserTastes(tastes||[]);setOnboarded(true);}}/>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+        body{margin:0;background:${C.bg};}
+        ::-webkit-scrollbar{width:0;height:0;}
+        input::placeholder,textarea::placeholder{color:${C.muted};}
+        input:focus,textarea:focus{border-color:${C.amber}!important;}
+      `}</style>
+
+      <div style={{maxWidth:430,margin:"0 auto",background:C.bg,minHeight:"100vh",fontFamily:"'Inter',system-ui,sans-serif",color:C.dark}}>
+        {detail ? (
+          <BarDetail bar={detail} onBack={()=>setDetail(null)}/>
+        ) : (
+          <>
+            {tab==="home"    && <HomeTab bars={bars} setBars={setBars} onBarTap={goBar} userCity={userCity} userTastes={userTastes} onGoExplore={()=>setTab("explore")}/>}
+            {tab==="explore" && <TrendingTab onBarTap={goBar} userCity={userCity} userTastes={userTastes} bars={bars} setBars={setBars}/>}
+            {tab==="me"      && <MeTab bars={bars} setBars={setBars} onBarTap={goBar}/>}
+
+
+
+            <nav style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:`${C.card}F8`,backdropFilter:"blur(18px)",borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",padding:"10px 0 18px",zIndex:100}}>
+              {/* Explore tab */}
+              <button onClick={()=>setTab("explore")}
+                style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 0",cursor:"pointer",color:tab==="explore"?C.amber:C.muted,fontSize:10,letterSpacing:".08em",textTransform:"uppercase",border:"none",background:"none",fontFamily:"inherit",transition:"color .2s",fontWeight:tab==="explore"?700:400}}>
+                {I.explore}<span>Explore</span>
+              </button>
+              {/* Centre + button — raised above nav */}
+              <div style={{flex:1,display:"flex",justifyContent:"center",alignItems:"center"}}>
+                <button onClick={()=>setShowCheckin(true)}
+                  style={{width:52,height:52,borderRadius:"50%",background:C.amber,color:"#fff",border:`3px solid ${C.card}`,cursor:"pointer",fontSize:26,fontWeight:300,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 2px 12px ${C.amber}66`,marginTop:-24,transition:"transform .15s",fontFamily:"inherit"}}
+                  onMouseEnter={e=>e.currentTarget.style.transform="scale(1.08)"}
+                  onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+                  +
+                </button>
+              </div>
+              {/* Me tab */}
+              <button onClick={()=>setTab("me")}
+                style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 0",cursor:"pointer",color:tab==="me"?C.amber:C.muted,fontSize:10,letterSpacing:".08em",textTransform:"uppercase",border:"none",background:"none",fontFamily:"inherit",transition:"color .2s",fontWeight:tab==="me"?700:400}}>
+                {I.profile}<span>Me</span>
+              </button>
+            </nav>
+          </>
+        )}
+
+        {showCheckin && <QuickCheckin bars={bars} onDone={()=>{}} onClose={()=>setShowCheckin(false)} userCity={userCity}/>}
+      </div>
+    </>
+  );
+}
+
+
+    ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+    document.getElementById("splash").style.display = "none";
+  </script>
+</body>
+</html>
